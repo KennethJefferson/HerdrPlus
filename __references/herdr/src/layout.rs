@@ -210,6 +210,15 @@ impl TileLayout {
         set_ratio_at(&mut self.root, path, ratio.clamp(0.1, 0.9))
     }
 
+    /// Reset every split ratio so all leaf panes get equal ideal area
+    /// (leaf-count weighted, clamped like manual resize). Returns true if
+    /// any ratio changed.
+    pub fn balance(&mut self) -> bool {
+        let before = split_ratios(&self.root);
+        balance_node(&mut self.root);
+        split_ratios(&self.root) != before
+    }
+
     /// Adjust the nearest split in the given direction for the focused pane.
     /// `delta` is positive to grow, negative to shrink.
     pub fn resize_focused(&mut self, nav: NavDirection, delta: f32, area: Rect) {
@@ -499,6 +508,26 @@ fn split_ratios(node: &Node) -> Vec<(Vec<bool>, f32)> {
     let mut out = Vec::new();
     collect(node, &mut Vec::new(), &mut out);
     out
+}
+
+/// Post-order walk: set each split's ratio to first_leaves/total_leaves and
+/// return this subtree's leaf count.
+fn balance_node(node: &mut Node) -> usize {
+    match node {
+        Node::Pane(_) => 1,
+        Node::Split {
+            ratio,
+            first,
+            second,
+            ..
+        } => {
+            let first_leaves = balance_node(first);
+            let second_leaves = balance_node(second);
+            *ratio =
+                valid_split_ratio(first_leaves as f32 / (first_leaves + second_leaves) as f32);
+            first_leaves + second_leaves
+        }
+    }
 }
 
 fn swap_pane_ids(node: &mut Node, first: PaneId, second: PaneId) {
@@ -953,5 +982,97 @@ mod tests {
             find_in_direction(&focused, NavDirection::Left, &panes),
             Some(pane(3))
         );
+    }
+
+    #[test]
+    fn balance_two_panes_resets_ratio_to_half() {
+        let (mut layout, root) = TileLayout::new();
+        layout.focus_pane(root);
+        layout.split_focused_with_ratio(Direction::Horizontal, 0.3);
+
+        let changed = layout.balance();
+
+        assert!(changed);
+        let splits = split_snapshot(&layout);
+        assert_eq!(splits.len(), 1);
+        assert!((splits[0].1 - 0.5).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn balance_asymmetric_three_pane_tree_weights_by_leaf_count() {
+        // A | (B over C): root should get ratio 1/3 (1 leaf vs 2), inner 0.5.
+        let mut layout = TileLayout::from_saved(
+            Node::Split {
+                direction: Direction::Horizontal,
+                ratio: 0.5,
+                first: Box::new(Node::Pane(pane(1))),
+                second: Box::new(Node::Split {
+                    direction: Direction::Vertical,
+                    ratio: 0.7,
+                    first: Box::new(Node::Pane(pane(2))),
+                    second: Box::new(Node::Pane(pane(3))),
+                }),
+            },
+            pane(1),
+        );
+
+        let changed = layout.balance();
+
+        assert!(changed);
+        let splits = split_snapshot(&layout);
+        assert_eq!(splits.len(), 2);
+        assert!((splits[0].1 - 1.0 / 3.0).abs() < 1e-6);
+        assert!((splits[1].1 - 0.5).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn balance_mixed_direction_tree_from_sample_layout() {
+        // sample_layout(): 4 leaves. Root: 1 vs 3 -> 0.25; middle: 1 vs 2 -> 1/3; inner: 0.5.
+        let mut layout = sample_layout();
+
+        let changed = layout.balance();
+
+        assert!(changed);
+        let splits = split_snapshot(&layout);
+        assert_eq!(splits.len(), 3);
+        assert!((splits[0].1 - 0.25).abs() < 1e-6);
+        assert!((splits[1].1 - 1.0 / 3.0).abs() < 1e-6);
+        assert!((splits[2].1 - 0.5).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn balance_eleven_leaf_chain_clamps_root_ratio() {
+        // Right-deep chain of 11 leaves: ideal root ratio 1/11 (< 0.1) clamps to 0.1.
+        let mut node = Node::Pane(pane(11));
+        for id in (1..=10).rev() {
+            node = Node::Split {
+                direction: Direction::Horizontal,
+                ratio: 0.5,
+                first: Box::new(Node::Pane(pane(id))),
+                second: Box::new(node),
+            };
+        }
+        let mut layout = TileLayout::from_saved(node, pane(1));
+
+        layout.balance();
+
+        let splits = split_snapshot(&layout);
+        assert_eq!(splits.len(), 10);
+        assert!((splits[0].1 - 0.1).abs() < f32::EPSILON);
+        // The 10-leaf subtree at depth 1 wants 1/10 = 0.1: exactly at the clamp, allowed.
+        assert!((splits[1].1 - 0.1).abs() < 1e-6);
+    }
+
+    #[test]
+    fn balance_is_idempotent_and_reports_unchanged_second_time() {
+        let mut layout = sample_layout();
+        assert!(layout.balance());
+        assert!(!layout.balance());
+    }
+
+    #[test]
+    fn balance_single_pane_reports_unchanged() {
+        let (mut layout, _root) = TileLayout::new();
+        assert!(!layout.balance());
     }
 }
