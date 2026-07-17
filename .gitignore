@@ -1,0 +1,32 @@
+# Upstream herdr clone — reference base with its own .git, never committed here
+__references/herdr/
+
+# Build output
+__solutions/target/
+target/
+
+# Zig caches
+.zig-global-cache/
+.zig-cache/
+zig-out/
+
+# Rust
+**/*.rs.bk
+*.pdb
+
+# Editor / IDE
+.vscode/
+.idea/
+*.swp
+
+# Claude Code local settings
+.claude/settings.local.json
+
+# Windows
+Thumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# Logs & temp
+*.log
+*.tmp

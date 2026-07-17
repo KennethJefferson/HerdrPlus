@@ -1,0 +1,6 @@
+[build]
+target-dir = "K:/Downloads/__Projects.Mine/herdr4Windows/__solutions/target"
+
+[env]
+ZIG = "C:/Zig/zig.exe"
+ZIG_GLOBAL_CACHE_DIR = "K:/Downloads/__Projects.Mine/herdr4Windows/.zig-global-cache"
