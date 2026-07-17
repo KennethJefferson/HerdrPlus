@@ -1,6 +1,3 @@
-# Upstream herdr clone — reference base with its own .git, never committed here
-__references/herdr/
-
 # Build output
 __solutions/target/
 target/

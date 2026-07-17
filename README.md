@@ -31,7 +31,7 @@ That's it. `.cargo/config.toml` at the repo root handles everything else:
 ## Layout
 
 ```
-__references/herdr/   upstream herdr clone (reference base, not committed)
+__references/herdr/   vendored upstream herdr source (reference base)
 __solutions/          all build output (target dir lives here)
 __research/           notes and investigation artifacts
 .cargo/config.toml    build configuration (target-dir + Zig env)

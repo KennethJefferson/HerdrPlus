@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 This file is append-only: new entries go on top, existing entries are never rewritten.
 
+## [0.1.1] - 2026-07-17
+
+### Changed
+
+- Vendored the upstream herdr source (`master` @ `040956531f673c8fb7720037494ed4e61b123c6c`) into the repository at `__references/herdr/` — previously gitignored as an external clone. The nested `.git` was removed; upstream provenance is recorded here and in `CLAUDE.md`.
+
 ## [0.1.0] - 2026-07-17
 
 ### Added

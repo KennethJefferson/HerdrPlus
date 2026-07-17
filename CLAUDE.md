@@ -4,7 +4,7 @@ HerdrPlus is a Windows-first extension of upstream [herdr](https://github.com/og
 
 ## Layout
 
-- `__references/herdr/` — full upstream clone (v0.7.4 base, `master`). This is the working codebase; it has its own nested `.git` and is NOT committed to this repo.
+- `__references/herdr/` — vendored upstream herdr source (v0.7.4 base, `master` @ `0409565`). This is the working codebase, committed to this repo. The nested `.git` was removed when vendoring; to diff against or update from upstream, clone https://github.com/ogulcancelik/herdr separately and compare.
 - `__solutions/` — ALL build output goes here. Cargo's target dir is `__solutions/target/`; the release binary is `__solutions/target/release/herdr.exe`.
 - `__research/` — investigation notes and artifacts.
 - `.cargo/config.toml` — ancestor cargo config; applies to every cargo command run inside this tree. Do not delete it.
