@@ -1200,3 +1200,59 @@ fn layout_balance_method_serde_round_trip() {
     let back: Method = serde_json::from_value(json).unwrap();
     assert_eq!(back, method);
 }
+
+#[test]
+fn msg_methods_serde_round_trip() {
+    let method = Method::MsgSend(MsgSendParams {
+        target: "worker-1".into(),
+        body: "hello".into(),
+        sender_pane_id: Some("w1:p1".into()),
+    });
+    let json = serde_json::to_value(&method).unwrap();
+    assert_eq!(json["method"], "msg.send");
+    let back: Method = serde_json::from_value(json).unwrap();
+    assert_eq!(back, method);
+
+    let method = Method::MsgList(MsgListParams {
+        pane_id: "w1:p2".into(),
+        after_seq: Some(5),
+        include_read: Some(false),
+    });
+    let json = serde_json::to_value(&method).unwrap();
+    assert_eq!(json["method"], "msg.list");
+    let back: Method = serde_json::from_value(json).unwrap();
+    assert_eq!(back, method);
+
+    let method = Method::MsgAck(MsgAckParams {
+        pane_id: "w1:p2".into(),
+        up_to_seq: 10,
+    });
+    let json = serde_json::to_value(&method).unwrap();
+    assert_eq!(json["method"], "msg.ack");
+    let back: Method = serde_json::from_value(json).unwrap();
+    assert_eq!(back, method);
+
+    let method = Method::MsgGroupJoin(MsgGroupJoinParams {
+        pane_id: "w1:p2".into(),
+        group: "workers".into(),
+    });
+    let json = serde_json::to_value(&method).unwrap();
+    assert_eq!(json["method"], "msg.group_join");
+    let back: Method = serde_json::from_value(json).unwrap();
+    assert_eq!(back, method);
+
+    let method = Method::MsgGroupLeave(MsgGroupLeaveParams {
+        pane_id: "w1:p2".into(),
+        group: "workers".into(),
+    });
+    let json = serde_json::to_value(&method).unwrap();
+    assert_eq!(json["method"], "msg.group_leave");
+    let back: Method = serde_json::from_value(json).unwrap();
+    assert_eq!(back, method);
+
+    let method = Method::MsgWho(EmptyParams {});
+    let json = serde_json::to_value(&method).unwrap();
+    assert_eq!(json["method"], "msg.who");
+    let back: Method = serde_json::from_value(json).unwrap();
+    assert_eq!(back, method);
+}

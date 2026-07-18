@@ -1442,6 +1442,33 @@ impl AppState {
             .unwrap_or_default()
     }
 
+    /// Public pane ids for panes still present in `ws_idx`. Must be computed
+    /// BEFORE the panes are removed — the public-number mapping disappears
+    /// with the pane.
+    pub(crate) fn public_pane_ids_for_removal(
+        &self,
+        ws_idx: usize,
+        pane_ids: impl IntoIterator<Item = PaneId>,
+    ) -> Vec<String> {
+        let Some(ws) = self.workspaces.get(ws_idx) else {
+            return Vec::new();
+        };
+        pane_ids
+            .into_iter()
+            .filter_map(|pane_id| ws.public_pane_number(pane_id))
+            .map(|number| crate::workspace::public_pane_id_for_number(&ws.id, number))
+            .collect()
+    }
+
+    /// Tear down message-bus state (inbox + group membership) for removed
+    /// panes. Every pane-removal path must call this so dead panes do not
+    /// leak inboxes or linger as group members.
+    pub(crate) fn msg_bus_remove_public_pane_ids(&mut self, public_pane_ids: &[String]) {
+        for public_pane_id in public_pane_ids {
+            self.msg_bus.remove_pane(public_pane_id);
+        }
+    }
+
     pub(crate) fn terminal_id_for_pane(
         &self,
         ws_idx: usize,
@@ -1522,14 +1549,23 @@ impl AppState {
 
         let mut terminal_ids = Vec::new();
         let mut pane_ids = Vec::new();
+        let mut removed_public_pane_ids = Vec::new();
         for idx in &close_indices {
             terminal_ids.extend(self.terminal_ids_for_workspace(*idx));
-            pane_ids.extend(self.pane_ids_for_workspace(*idx));
+            let workspace_pane_ids = self.pane_ids_for_workspace(*idx);
+            // Collect canonical public pane ids for EVERY workspace being
+            // closed (a worktree group closes multiple workspaces at once)
+            // BEFORE removal — the public-number mapping dies with the pane.
+            removed_public_pane_ids.extend(
+                self.public_pane_ids_for_removal(*idx, workspace_pane_ids.iter().copied()),
+            );
+            pane_ids.extend(workspace_pane_ids);
             if let Some(workspace_id) = self.workspaces.get(*idx).map(|ws| ws.id.clone()) {
                 crate::logging::workspace_closed(&workspace_id);
             }
         }
         self.remove_plugin_pane_records(pane_ids);
+        self.msg_bus_remove_public_pane_ids(&removed_public_pane_ids);
         for idx in close_indices.iter().rev() {
             self.workspaces.remove(*idx);
         }
@@ -3054,6 +3090,8 @@ impl AppState {
 
         let pane_terminal_id = self.terminal_id_for_pane(ws_idx, pane_id);
         let workspace_terminal_ids = self.terminal_ids_for_workspace(ws_idx);
+        let removed_public_pane_ids = self.public_pane_ids_for_removal(ws_idx, [pane_id]);
+        self.msg_bus_remove_public_pane_ids(&removed_public_pane_ids);
         self.pane_id_aliases.retain(|_, alias| *alias != pane_id);
         self.public_pane_id_aliases
             .retain(|_, alias| *alias != pane_id);
@@ -4284,6 +4322,117 @@ mod tests {
         assert!(state.selection_autoscroll.is_none());
         assert_eq!(state.workspaces[0].panes.len(), 1);
         assert_eq!(state.workspaces[0].panes.keys().next().unwrap(), &first_id);
+        state.assert_invariants_for_test();
+    }
+
+    #[test]
+    fn pane_died_tears_down_msg_bus_state() {
+        let mut state = app_with_workspaces(&["test"]);
+        let second_id = state.workspaces[0].test_split(Direction::Horizontal);
+        state.ensure_test_terminals();
+
+        let number = state.workspaces[0].public_pane_number(second_id).unwrap();
+        let public_id =
+            crate::workspace::public_pane_id_for_number(&state.workspaces[0].id, number);
+
+        state.msg_bus.group_join(&public_id, "devs").unwrap();
+        state
+            .msg_bus
+            .deliver(
+                &public_id,
+                crate::msg::StoredMsg {
+                    seq: 0,
+                    from_pane_id: None,
+                    from_workspace_id: None,
+                    from_label: "external".into(),
+                    to: public_id.clone(),
+                    body: "hello".into(),
+                    timestamp: "2026-07-18T00:00:00Z".into(),
+                },
+            )
+            .unwrap();
+        assert_eq!(state.msg_bus.next_seq(&public_id), 2);
+
+        state.handle_pane_died(second_id);
+
+        // Inbox gone: seq counter reset, no stored messages.
+        assert_eq!(state.msg_bus.next_seq(&public_id), 1);
+        let (msgs, unread, _, _) = state.msg_bus.list(&public_id, None, true);
+        assert!(msgs.is_empty());
+        assert_eq!(unread, 0);
+        // Group membership gone; "devs" had no other members so it is removed.
+        assert!(state.msg_bus.groups_of(&public_id).is_empty());
+        assert!(state.msg_bus.group_members("devs").is_empty());
+        state.assert_invariants_for_test();
+    }
+
+    #[test]
+    fn close_worktree_group_tears_down_msg_bus_for_all_group_workspaces() {
+        let mut state = app_with_workspaces(&["main", "issue", "notes"]);
+        state.workspaces[0].worktree_space = Some(crate::workspace::WorktreeSpaceMembership {
+            key: "repo-key".into(),
+            label: "herdr".into(),
+            repo_root: "/repo/herdr".into(),
+            checkout_path: "/repo/herdr".into(),
+            is_linked_worktree: false,
+        });
+        state.workspaces[1].worktree_space = Some(crate::workspace::WorktreeSpaceMembership {
+            key: "repo-key".into(),
+            label: "herdr".into(),
+            repo_root: "/repo/herdr".into(),
+            checkout_path: "/repo/herdr-issue".into(),
+            is_linked_worktree: true,
+        });
+
+        let public_ids: Vec<String> = (0..3)
+            .map(|ws_idx| {
+                let pane_id = state.workspaces[ws_idx].tabs[0].root_pane;
+                let number = state.workspaces[ws_idx]
+                    .public_pane_number(pane_id)
+                    .unwrap();
+                crate::workspace::public_pane_id_for_number(&state.workspaces[ws_idx].id, number)
+            })
+            .collect();
+        for public_id in &public_ids {
+            state.msg_bus.group_join(public_id, "devs").unwrap();
+            state
+                .msg_bus
+                .deliver(
+                    public_id,
+                    crate::msg::StoredMsg {
+                        seq: 0,
+                        from_pane_id: None,
+                        from_workspace_id: None,
+                        from_label: "external".into(),
+                        to: public_id.clone(),
+                        body: "hello".into(),
+                        timestamp: "2026-07-18T00:00:00Z".into(),
+                    },
+                )
+                .unwrap();
+        }
+
+        state.selected = 0;
+        state.active = Some(0);
+        state.close_selected_workspace();
+
+        // Whole worktree group closed (parent + linked member).
+        assert_eq!(state.workspaces.len(), 1);
+        assert_eq!(state.workspaces[0].display_name(), "notes");
+        // EVERY closed workspace's panes are purged from the bus, not just
+        // the requested one.
+        for public_id in &public_ids[..2] {
+            assert_eq!(state.msg_bus.next_seq(public_id), 1);
+            assert_eq!(state.msg_bus.unread(public_id), 0);
+            assert!(state.msg_bus.groups_of(public_id).is_empty());
+        }
+        // Surviving workspace's pane keeps its inbox and membership.
+        assert_eq!(state.msg_bus.next_seq(&public_ids[2]), 2);
+        assert_eq!(state.msg_bus.unread(&public_ids[2]), 1);
+        assert_eq!(
+            state.msg_bus.group_members("devs"),
+            vec![public_ids[2].clone()]
+        );
         state.assert_invariants_for_test();
     }
 

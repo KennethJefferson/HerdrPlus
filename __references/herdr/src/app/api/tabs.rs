@@ -238,6 +238,9 @@ impl App {
             .and_then(|ws| ws.tabs.get(tab_idx))
             .map(|tab| tab.layout.pane_ids())
             .unwrap_or_default();
+        let removed_public_pane_ids = self
+            .state
+            .public_pane_ids_for_removal(ws_idx, pane_ids.iter().copied());
         let Some(ws) = self.state.workspaces.get_mut(ws_idx) else {
             return tab_not_found(id, &target.tab_id);
         };
@@ -255,6 +258,8 @@ impl App {
                 format!("tab {} could not be closed", target.tab_id),
             );
         }
+        self.state
+            .msg_bus_remove_public_pane_ids(&removed_public_pane_ids);
         self.state.remove_plugin_pane_records(pane_ids);
         self.state.remove_unattached_terminal_ids(terminal_ids);
         self.shutdown_detached_terminal_runtimes();

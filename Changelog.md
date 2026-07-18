@@ -7,6 +7,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 This file is append-only: new entries go on top, existing entries are never rewritten.
 
+## [0.3.2] - 2026-07-18
+
+### Fixed
+
+- Closing a worktree group (parent + linked worktree workspaces) now purges msg-bus state for panes in EVERY closed workspace, not just the requested one — `close_selected_workspace` owns the teardown for all close paths (TUI, API `workspace.close`, worktree removal, last-pane cascade).
+- Cross-workspace `pane.move` re-keys msg-bus state to the pane's new canonical public id: the inbox travels intact (seq/ack/dropped counters preserved) and group membership follows; nothing is stranded under the old id.
+- `msg wait` no longer misses messages when a large `@all`/group broadcast evicts this pane's `MsgReceived` event from the 512-entry event ring: the subscription is now only a wake hint — the CLI re-lists the inbox on every wake or 250ms poll tick, with `--timeout` still bounding total wait.
+- `msg read --after SEQ` no longer over-acks: it is peek-like (never auto-acks), since acking the highest displayed seq would silently mark skipped unread messages as read. Plain `msg read` still auto-acks the highest displayed seq.
+- `msg.send` with a PROVIDED sender pane id that does not resolve to a live pane (blank, malformed, closed) now returns `pane_not_found` instead of storing the bogus id verbatim; only an absent sender id means external identity.
+- Msg targets containing `:` are only treated as pane ids when they match the canonical public-pane-id grammar (`w<ENC>:p<ENC>`); labels like `worker:api` now route as labels.
+- `msg.send` validates the 64 KiB body cap before resolution, so an empty fan-out (e.g. `@all` excluding the only pane) can no longer "accept" an oversized body; zero-recipient sends return an empty `delivered_to` with a `null` `message` instead of a bogus `seq: 0` message object (schema: `msg_send.message` is now nullable).
+
+## [0.3.1] - 2026-07-18
+
+### Fixed
+
+- Msg-bus state (inbox + group membership) is now torn down on every pane-removal path — process death (`handle_pane_died`), tab close, workspace close, and layout-apply tab replacement/rollback — not just API `pane.close`. Dead panes no longer leak inboxes or linger as `@group` members.
+- `msg wait` missed-wakeup race: the CLI now subscribes to `MsgReceived` before taking the baseline `msg.list`; if unread messages already exist at baseline they are printed immediately without blocking.
+- All `msg.*` handlers (`list`, `ack`, `group join/leave`, `send` sender) canonicalize the pane id via the public-id path, so alias forms (`p_N`, post-restore aliases) address the same inbox and group membership as the canonical id; stored `from_pane_id` and `@all` sender exclusion also use the canonical id.
+- `msg.send` failures now return distinct wire error codes per the protocol-18 spec — `pane_not_found`, `unknown_target`, `ambiguous_target` (candidates formatted as `workspace_id/label (pane_id)`), `empty_group`, `unaddressable_label` — instead of a collapsed `invalid_target`.
+
+## [0.3.0] - 2026-07-18
+
+### Added
+
+- Inter-pane messaging ("msg") bus: per-pane inboxes, label-based addressing, group support (`@devs`, `@all`), subscription-based waiting, and a CLI subcommand interface (`herdrplus msg`).
+- Visible unread message indicator (✉ <count>) on the TUI pane border title when unread messages are present.
+- Protocol bumped 17 → 18. Design: `docs/superpowers/specs/2026-07-18-pane-comms-design.md`.
+
 ## [0.2.1] - 2026-07-18
 
 ### Changed

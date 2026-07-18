@@ -617,12 +617,33 @@ fn render_pane_border_titles(
         if !info.borders.contains(Borders::TOP) || info.rect.width <= 4 {
             continue;
         }
-        let Some(title) = ws
+        let label_opt = ws
             .pane_state(info.id)
             .and_then(|pane| app.terminals.get(&pane.attached_terminal_id))
-            .and_then(|terminal| terminal.border_label(app.show_agent_labels_on_pane_borders))
-            .and_then(|label| pane_border_title(&label, info.rect.width, info.is_focused))
-        else {
+            .and_then(|terminal| terminal.border_label(app.show_agent_labels_on_pane_borders));
+
+        let unread = ws
+            .public_pane_number(info.id)
+            .map(|num| crate::workspace::public_pane_id_for_number(&ws.id, num))
+            .map(|pub_id| app.msg_bus.unread(&pub_id))
+            .unwrap_or(0);
+
+        let label = label_opt.unwrap_or_default();
+        let display_label = if unread > 0 {
+            if label.is_empty() {
+                format!("✉ {unread}")
+            } else {
+                format!("{label} ✉ {unread}")
+            }
+        } else {
+            label
+        };
+
+        if display_label.is_empty() {
+            continue;
+        }
+
+        let Some(title) = pane_border_title(&display_label, info.rect.width, info.is_focused) else {
             continue;
         };
         let y = info.rect.y;
@@ -1472,5 +1493,57 @@ mod tests {
             panic!("selection background should resolve to rgb");
         };
         assert!(relative_luminance((r, g, b)) > relative_luminance((12, 14, 16)));
+    }
+
+    #[test]
+    fn test_unread_badge_renders_in_border() {
+        let mut app = AppState::test_new();
+        app.mode = Mode::Terminal;
+        app.view.terminal_area = Rect::new(0, 0, 15, 3);
+        let ws = Workspace::test_new("test");
+        let pane_id = ws.tabs[0].root_pane;
+        app.view.pane_infos = vec![PaneInfo {
+            id: pane_id,
+            rect: Rect::new(0, 0, 15, 3),
+            inner_rect: Rect::default(),
+            scrollbar_rect: None,
+            borders: Borders::ALL,
+            is_focused: false,
+        }];
+
+        let terminal_id = ws.tabs[0].panes[&pane_id].attached_terminal_id.clone();
+        let mut terminal_state = TerminalState::new(terminal_id.clone(), "/tmp".into());
+        terminal_state.set_manual_label("worker".into());
+        app.terminals.insert(terminal_id, terminal_state);
+
+        let pub_id = ws.public_pane_number(pane_id)
+            .map(|num| crate::workspace::public_pane_id_for_number(&ws.id, num))
+            .unwrap();
+
+        let msg = crate::msg::StoredMsg {
+            seq: 1,
+            from_pane_id: None,
+            from_workspace_id: None,
+            from_label: "external".into(),
+            to: pub_id.clone(),
+            body: "test body".into(),
+            timestamp: "2026-07-18T00:00:00Z".into(),
+        };
+        app.msg_bus.deliver(&pub_id, msg).unwrap();
+
+        assert_eq!(app.msg_bus.unread(&pub_id), 1);
+
+        let mut terminal =
+            ratatui::Terminal::new(ratatui::backend::TestBackend::new(15, 3)).unwrap();
+        terminal
+            .draw(|frame| render_view_pane_borders(&app, &ws, frame))
+            .unwrap();
+
+        let buffer = terminal.backend().buffer();
+        let mut line_chars = String::new();
+        for x in 0..15 {
+            line_chars.push_str(buffer[(x, 0)].symbol());
+        }
+        assert!(line_chars.contains("✉ 1"));
     }
 }

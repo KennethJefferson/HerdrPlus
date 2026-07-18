@@ -1,0 +1,901 @@
+use crate::api::schema::{
+    MsgAckParams, MsgGroupJoinParams, MsgGroupLeaveParams, MsgInfo, MsgListParams,
+    MsgSendParams, MsgSendResult, MsgWhoGroupInfo, MsgWhoPaneInfo,
+    ResponseResult,
+};
+use crate::app::App;
+use crate::app::api::responses::{encode_error, encode_success};
+
+impl App {
+    /// Canonical public pane id for any accepted pane-id form (`p_N`,
+    /// `ws-N`, post-restore aliases, ...). The msg bus is keyed exclusively
+    /// on canonical ids, so every msg.* handler must resolve through here.
+    fn canonical_pane_id(&self, raw: &str) -> Option<String> {
+        let (ws_idx, pane_id) = self.parse_pane_id(raw)?;
+        self.public_pane_id(ws_idx, pane_id)
+    }
+
+    pub(super) fn handle_msg_send(&mut self, id: String, params: MsgSendParams) -> String {
+        // Enforce the body cap BEFORE resolution/delivery: a zero-recipient
+        // fan-out (e.g. `@all` that excludes the only pane) must not let an
+        // oversized body "succeed" by skipping the per-delivery check.
+        if params.body.len() > crate::msg::MAX_MESSAGE_BODY_BYTES {
+            return encode_error(
+                id,
+                "message_too_large",
+                format!(
+                    "message body exceeds {} byte limit",
+                    crate::msg::MAX_MESSAGE_BODY_BYTES
+                ),
+            );
+        }
+
+        let target = match crate::msg::MsgBus::parse_target(&params.target) {
+            Ok(t) => t,
+            Err(e) => {
+                return resolve_error_response(id, None, &e);
+            }
+        };
+
+        let mut directory = Vec::new();
+        for (ws_idx, ws) in self.state.workspaces.iter().enumerate() {
+            let workspace_id = self.public_workspace_id(ws_idx);
+            for &pane_id in ws.public_pane_numbers.keys() {
+                if let Some(pane) = ws.pane_state(pane_id) {
+                    if let Some(terminal) = self.state.terminals.get(&pane.attached_terminal_id) {
+                        let manual_label = terminal.manual_label.clone().unwrap_or_default();
+                        if let Some(public_pane_id) = self.public_pane_id(ws_idx, pane_id) {
+                            directory.push((workspace_id.clone(), public_pane_id, manual_label));
+                        }
+                    }
+                }
+            }
+        }
+
+        let parsed_sender = params
+            .sender_pane_id
+            .as_deref()
+            .and_then(|raw| self.parse_pane_id(raw));
+        let sender_workspace = parsed_sender.map(|(ws_idx, _)| self.public_workspace_id(ws_idx));
+        // Canonical sender id: bus keys, sender exclusion, and the stored
+        // from_pane_id all use the canonical public id, never the raw
+        // claimed form. A PROVIDED sender id that does not resolve to a live
+        // pane (blank, malformed, or closed) is rejected — only an ABSENT
+        // sender_pane_id means external identity.
+        let sender_pane_id = match params.sender_pane_id.as_deref() {
+            Some(raw) => {
+                let canonical = parsed_sender
+                    .and_then(|(ws_idx, pane_id)| self.public_pane_id(ws_idx, pane_id));
+                match canonical {
+                    Some(canonical) => Some(canonical),
+                    None => {
+                        return encode_error(
+                            id,
+                            "pane_not_found",
+                            format!("sender pane {raw} not found"),
+                        );
+                    }
+                }
+            }
+            None => None,
+        };
+
+        let mut resolved = match self.state.msg_bus.resolve(&target, sender_workspace.as_deref(), &directory) {
+            Ok(r) => r,
+            Err(e) => {
+                return resolve_error_response(id, Some(&target), &e);
+            }
+        };
+
+        if matches!(target, crate::msg::MsgTarget::All) {
+            if let Some(ref sender_id) = sender_pane_id {
+                resolved.retain(|pane_id| pane_id != sender_id);
+            }
+        }
+
+        let from_label = if params.sender_pane_id.is_some() {
+            parsed_sender
+                .and_then(|(ws_idx, pane_id)| {
+                    self.state
+                        .workspaces
+                        .get(ws_idx)
+                        .and_then(|ws| ws.pane_state(pane_id))
+                })
+                .and_then(|pane| self.state.terminals.get(&pane.attached_terminal_id))
+                .and_then(|terminal| terminal.manual_label.clone())
+                .unwrap_or_default()
+        } else {
+            "external".to_string()
+        };
+
+        let timestamp = time::OffsetDateTime::now_utc()
+            .format(&time::format_description::well_known::Rfc3339)
+            .unwrap_or_else(|_| "2026-07-18T00:00:00Z".to_string());
+
+        let mut first_seq = 0;
+        let mut first = true;
+        for pane_id in &resolved {
+            let seq = self.state.msg_bus.next_seq(pane_id);
+            if first {
+                first_seq = seq;
+                first = false;
+            }
+            let msg = crate::msg::StoredMsg {
+                seq,
+                from_pane_id: sender_pane_id.clone(),
+                from_workspace_id: sender_workspace.clone(),
+                from_label: from_label.clone(),
+                to: params.target.clone(),
+                body: params.body.clone(),
+                timestamp: timestamp.clone(),
+            };
+            if let Err(e) = self.state.msg_bus.deliver(pane_id, msg) {
+                let code = match e {
+                    crate::msg::MsgError::MessageTooLarge => "message_too_large",
+                    crate::msg::MsgError::InvalidGroupName(_) => "invalid_group_name",
+                };
+                return encode_error(id, code, "message delivery failed");
+            }
+
+            self.emit_event(crate::api::schema::EventEnvelope {
+                event: crate::api::schema::EventKind::MsgReceived,
+                data: crate::api::schema::EventData::PaneMsgReceived {
+                    pane_id: pane_id.clone(),
+                    seq,
+                },
+            });
+        }
+
+        // Zero-recipient sends (e.g. `@all` excluding the only pane) return
+        // an empty delivered_to and a null message — never a bogus seq:0
+        // message object that was delivered nowhere.
+        let message = (!resolved.is_empty()).then(|| MsgInfo {
+            seq: first_seq,
+            from_pane_id: sender_pane_id,
+            from_workspace_id: sender_workspace,
+            from_label,
+            to: params.target,
+            body: params.body,
+            timestamp,
+        });
+        let res = MsgSendResult {
+            delivered_to: resolved,
+            message,
+        };
+        encode_success(id, ResponseResult::MsgSend {
+            delivered_to: res.delivered_to,
+            message: res.message,
+        })
+    }
+
+    pub(super) fn handle_msg_list(&mut self, id: String, params: MsgListParams) -> String {
+        let Some(pane_id) = self.canonical_pane_id(&params.pane_id) else {
+            return encode_error(id, "pane_not_found", format!("pane {} not found", params.pane_id));
+        };
+
+        let include_read = params.include_read.unwrap_or(true);
+        let (messages, unread, dropped, ack_seq) = self.state.msg_bus.list(
+            &pane_id,
+            params.after_seq,
+            include_read,
+        );
+
+        let messages_info = messages
+            .into_iter()
+            .map(|m| MsgInfo {
+                seq: m.seq,
+                from_pane_id: m.from_pane_id,
+                from_workspace_id: m.from_workspace_id,
+                from_label: m.from_label,
+                to: m.to,
+                body: m.body,
+                timestamp: m.timestamp,
+            })
+            .collect();
+
+        encode_success(
+            id,
+            ResponseResult::MsgList {
+                messages: messages_info,
+                unread,
+                dropped,
+                ack_seq,
+            },
+        )
+    }
+
+    pub(super) fn handle_msg_ack(&mut self, id: String, params: MsgAckParams) -> String {
+        let Some(pane_id) = self.canonical_pane_id(&params.pane_id) else {
+            return encode_error(id, "pane_not_found", format!("pane {} not found", params.pane_id));
+        };
+
+        let ack_seq = self.state.msg_bus.ack(&pane_id, params.up_to_seq);
+
+        encode_success(id, ResponseResult::MsgAck { ack_seq })
+    }
+
+    pub(super) fn handle_msg_group_join(&mut self, id: String, params: MsgGroupJoinParams) -> String {
+        let Some(pane_id) = self.canonical_pane_id(&params.pane_id) else {
+            return encode_error(id, "pane_not_found", format!("pane {} not found", params.pane_id));
+        };
+
+        match self.state.msg_bus.group_join(&pane_id, &params.group) {
+            Ok(groups) => encode_success(id, ResponseResult::MsgGroup { groups }),
+            Err(e) => {
+                let code = match e {
+                    crate::msg::MsgError::MessageTooLarge => "message_too_large",
+                    crate::msg::MsgError::InvalidGroupName(_) => "invalid_group_name",
+                };
+                encode_error(id, code, format!("failed to join group: {e:?}"))
+            }
+        }
+    }
+
+    pub(super) fn handle_msg_group_leave(&mut self, id: String, params: MsgGroupLeaveParams) -> String {
+        let Some(pane_id) = self.canonical_pane_id(&params.pane_id) else {
+            return encode_error(id, "pane_not_found", format!("pane {} not found", params.pane_id));
+        };
+
+        match self.state.msg_bus.group_leave(&pane_id, &params.group) {
+            Ok(groups) => encode_success(id, ResponseResult::MsgGroup { groups }),
+            Err(e) => {
+                let code = match e {
+                    crate::msg::MsgError::MessageTooLarge => "message_too_large",
+                    crate::msg::MsgError::InvalidGroupName(_) => "invalid_group_name",
+                };
+                encode_error(id, code, format!("failed to leave group: {e:?}"))
+            }
+        }
+    }
+
+    pub(super) fn handle_msg_who(&mut self, id: String) -> String {
+        let mut panes = Vec::new();
+        let mut all_groups = std::collections::HashSet::new();
+
+        for (ws_idx, ws) in self.state.workspaces.iter().enumerate() {
+            let workspace_id = self.public_workspace_id(ws_idx);
+            for &pane_id in ws.public_pane_numbers.keys() {
+                if let Some(pane) = ws.pane_state(pane_id) {
+                    if let Some(terminal) = self.state.terminals.get(&pane.attached_terminal_id) {
+                        let label = terminal.manual_label.clone().unwrap_or_default();
+                        if let Some(public_pane_id) = self.public_pane_id(ws_idx, pane_id) {
+                            let groups = self.state.msg_bus.groups_of(&public_pane_id);
+                            for g in &groups {
+                                all_groups.insert(g.clone());
+                            }
+                            let unread = self.state.msg_bus.unread(&public_pane_id);
+                            panes.push(MsgWhoPaneInfo {
+                                pane_id: public_pane_id,
+                                workspace_id: workspace_id.clone(),
+                                label,
+                                groups,
+                                unread,
+                            });
+                        }
+                    }
+                }
+            }
+        }
+
+        panes.sort_by(|a, b| a.pane_id.cmp(&b.pane_id));
+
+        let mut groups = Vec::new();
+        for gname in all_groups {
+            let mut members = self.state.msg_bus.group_members(&gname);
+            members.sort();
+            groups.push(MsgWhoGroupInfo {
+                name: gname,
+                members,
+            });
+        }
+        groups.sort_by(|a, b| a.name.cmp(&b.name));
+
+        encode_success(id, ResponseResult::MsgWho { panes, groups })
+    }
+}
+
+/// Map target parse/resolve failures to distinct wire error codes
+/// (protocol 18): `pane_not_found`, `unknown_target`, `ambiguous_target`,
+/// `empty_group`, `unaddressable_label`.
+///
+/// `target` is `None` when parsing itself failed (only unaddressable
+/// expressions fail to parse).
+fn resolve_error_response(
+    id: String,
+    target: Option<&crate::msg::MsgTarget>,
+    err: &crate::msg::ResolveError,
+) -> String {
+    use crate::msg::{MsgTarget, ResolveError};
+    match err {
+        ResolveError::NotFound => match target {
+            Some(MsgTarget::PaneId(pane_id)) => encode_error(
+                id,
+                "pane_not_found",
+                format!("pane {pane_id} not found"),
+            ),
+            _ => encode_error(id, "unknown_target", "no pane matches target"),
+        },
+        ResolveError::Ambiguous(candidates) => {
+            let formatted = candidates
+                .iter()
+                .map(|(workspace_id, label, pane_id)| {
+                    format!("{workspace_id}/{label} ({pane_id})")
+                })
+                .collect::<Vec<_>>()
+                .join(", ");
+            encode_error(
+                id,
+                "ambiguous_target",
+                format!("target is ambiguous, matches: {formatted}"),
+            )
+        }
+        ResolveError::Unaddressable(expr) => encode_error(
+            id,
+            "unaddressable_label",
+            format!("target is unaddressable: {expr}"),
+        ),
+        ResolveError::EmptyGroup(group) => encode_error(
+            id,
+            "empty_group",
+            format!("group {group} is empty or unknown"),
+        ),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::config::{Config, ShellModeConfig};
+    use super::super::test_support::exiting_test_command;
+    use crate::workspace::Workspace;
+    use crate::api::schema::{EventData, SuccessResponse};
+    use ratatui::layout::Direction;
+
+    fn app_with_workspace() -> App {
+        let (_api_tx, api_rx) = tokio::sync::mpsc::unbounded_channel();
+        let mut app = App::new(
+            &Config::default(),
+            true,
+            None,
+            api_rx,
+            crate::api::EventHub::default(),
+        );
+        app.state.default_shell = exiting_test_command().into();
+        app.state.shell_mode = ShellModeConfig::NonLogin;
+        app.state.workspaces = vec![Workspace::test_new("layout")];
+        app.state.active = Some(0);
+        app.state.selected = 0;
+        app.state.ensure_test_terminals();
+        app
+    }
+
+    #[test]
+    fn test_send_list_ack_round_trip() {
+        let mut app = app_with_workspace();
+        let root = app.state.workspaces[0].tabs[0].root_pane;
+        let right = app.state.workspaces[0].test_split(Direction::Horizontal);
+        app.state.ensure_test_terminals();
+
+        let root_term_id = app.state.workspaces[0].terminal_id(root).cloned().unwrap();
+        let right_term_id = app.state.workspaces[0].terminal_id(right).cloned().unwrap();
+
+        app.state.terminals.get_mut(&root_term_id).unwrap().set_manual_label("orchestrator".to_string());
+        app.state.terminals.get_mut(&right_term_id).unwrap().set_manual_label("worker-1".to_string());
+
+        let p1_id = app.public_pane_id(0, root).unwrap();
+        let p2_id = app.public_pane_id(0, right).unwrap();
+
+        // 1. Send message from p1 to p2 (worker-1)
+        let send_res = app.handle_msg_send(
+            "req_1".into(),
+            MsgSendParams {
+                target: "worker-1".into(),
+                body: "hello worker".into(),
+                sender_pane_id: Some(p1_id.clone()),
+            },
+        );
+        assert!(send_res.contains("msg_send"));
+        let success: SuccessResponse = serde_json::from_str(&send_res).unwrap();
+        let ResponseResult::MsgSend { delivered_to, message } = success.result else {
+            panic!("Expected MsgSend response");
+        };
+        assert_eq!(delivered_to, vec![p2_id.clone()]);
+        let message = message.expect("non-empty fanout carries a message");
+        assert_eq!(message.from_pane_id, Some(p1_id.clone()));
+        assert_eq!(message.from_label, "orchestrator");
+        assert_eq!(message.body, "hello worker");
+        assert_eq!(message.seq, 1);
+
+        // Verify MsgReceived event
+        let events = app.event_hub.events_after(0);
+        let event = events.last().expect("expected event");
+        assert_eq!(event.1.event, crate::api::schema::EventKind::MsgReceived);
+        let EventData::PaneMsgReceived { pane_id, seq } = &event.1.data else {
+            panic!("expected PaneMsgReceived event data");
+        };
+        assert_eq!(pane_id, &p2_id);
+        assert_eq!(*seq, 1);
+
+        // 2. List messages for p2
+        let list_res = app.handle_msg_list(
+            "req_2".into(),
+            MsgListParams {
+                pane_id: p2_id.clone(),
+                after_seq: None,
+                include_read: Some(true),
+            },
+        );
+        let success: SuccessResponse = serde_json::from_str(&list_res).unwrap();
+        let ResponseResult::MsgList { messages, unread, dropped, ack_seq } = success.result else {
+            panic!("Expected MsgList response");
+        };
+        assert_eq!(messages.len(), 1);
+        assert_eq!(messages[0].body, "hello worker");
+        assert_eq!(unread, 1);
+        assert_eq!(dropped, 0);
+        assert_eq!(ack_seq, 0);
+
+        // 3. Ack messages up to seq 1
+        let ack_res = app.handle_msg_ack(
+            "req_3".into(),
+            MsgAckParams {
+                pane_id: p2_id.clone(),
+                up_to_seq: 1,
+            },
+        );
+        let success: SuccessResponse = serde_json::from_str(&ack_res).unwrap();
+        let ResponseResult::MsgAck { ack_seq: new_ack_seq } = success.result else {
+            panic!("Expected MsgAck response");
+        };
+        assert_eq!(new_ack_seq, 1);
+
+        // 4. List again with include_read: false
+        let list_res_2 = app.handle_msg_list(
+            "req_4".into(),
+            MsgListParams {
+                pane_id: p2_id.clone(),
+                after_seq: None,
+                include_read: Some(false),
+            },
+        );
+        let success: SuccessResponse = serde_json::from_str(&list_res_2).unwrap();
+        let ResponseResult::MsgList { messages: messages_2, unread: unread_2, .. } = success.result else {
+            panic!("Expected MsgList response");
+        };
+        assert_eq!(messages_2.len(), 0);
+        assert_eq!(unread_2, 0);
+    }
+
+    #[test]
+    fn test_ambiguity_error() {
+        let mut app = app_with_workspace();
+        let _root = app.state.workspaces[0].tabs[0].root_pane;
+        let right = app.state.workspaces[0].test_split(Direction::Horizontal);
+        app.state.ensure_test_terminals();
+
+        // Workspace 1
+        app.state.workspaces.push(Workspace::test_new("other_workspace"));
+        let root2 = app.state.workspaces[1].tabs[0].root_pane;
+        app.state.ensure_test_terminals();
+
+        let term_right = app.state.workspaces[0].terminal_id(right).cloned().unwrap();
+        let term_root2 = app.state.workspaces[1].terminal_id(root2).cloned().unwrap();
+
+        app.state.terminals.get_mut(&term_right).unwrap().set_manual_label("worker-1".to_string());
+        app.state.terminals.get_mut(&term_root2).unwrap().set_manual_label("worker-1".to_string());
+
+        // Send message from external to "worker-1" - should be ambiguous
+        let send_res = app.handle_msg_send(
+            "req_1".into(),
+            MsgSendParams {
+                target: "worker-1".into(),
+                body: "hello worker".into(),
+                sender_pane_id: None,
+            },
+        );
+        assert!(send_res.contains("ambiguous_target"));
+        assert!(send_res.contains("target is ambiguous, matches:"));
+        // Candidates formatted as workspace_id/label (pane_id), not Debug.
+        assert!(send_res.contains("/worker-1 ("));
+        assert!(!send_res.contains("Ambiguous"));
+    }
+
+    #[test]
+    fn test_send_error_codes_are_distinct() {
+        let mut app = app_with_workspace();
+        app.state.ensure_test_terminals();
+
+        // Unknown pane id → pane_not_found.
+        let res = app.handle_msg_send(
+            "req_1".into(),
+            MsgSendParams {
+                target: "w9:p9".into(),
+                body: "hi".into(),
+                sender_pane_id: None,
+            },
+        );
+        assert!(res.contains("pane_not_found"));
+
+        // Unknown label → unknown_target.
+        let res = app.handle_msg_send(
+            "req_2".into(),
+            MsgSendParams {
+                target: "no-such-label".into(),
+                body: "hi".into(),
+                sender_pane_id: None,
+            },
+        );
+        assert!(res.contains("unknown_target"));
+
+        // Unknown / empty group → empty_group.
+        let res = app.handle_msg_send(
+            "req_3".into(),
+            MsgSendParams {
+                target: "@ghosts".into(),
+                body: "hi".into(),
+                sender_pane_id: None,
+            },
+        );
+        assert!(res.contains("empty_group"));
+
+        // Unaddressable label (multi-segment) → unaddressable_label.
+        let res = app.handle_msg_send(
+            "req_4".into(),
+            MsgSendParams {
+                target: "a/b/c".into(),
+                body: "hi".into(),
+                sender_pane_id: None,
+            },
+        );
+        assert!(res.contains("unaddressable_label"));
+
+        // Empty target expression → unaddressable_label.
+        let res = app.handle_msg_send(
+            "req_5".into(),
+            MsgSendParams {
+                target: "".into(),
+                body: "hi".into(),
+                sender_pane_id: None,
+            },
+        );
+        assert!(res.contains("unaddressable_label"));
+    }
+
+    #[test]
+    fn test_external_vs_pane_sender_resolution() {
+        let mut app = app_with_workspace();
+        let root = app.state.workspaces[0].tabs[0].root_pane;
+        let right = app.state.workspaces[0].test_split(Direction::Horizontal);
+        app.state.ensure_test_terminals();
+
+        // Workspace 1
+        app.state.workspaces.push(Workspace::test_new("other_workspace"));
+        let root2 = app.state.workspaces[1].tabs[0].root_pane;
+        app.state.ensure_test_terminals();
+
+        let term_right = app.state.workspaces[0].terminal_id(right).cloned().unwrap();
+        let term_root2 = app.state.workspaces[1].terminal_id(root2).cloned().unwrap();
+
+        app.state.terminals.get_mut(&term_right).unwrap().set_manual_label("worker-1".to_string());
+        app.state.terminals.get_mut(&term_root2).unwrap().set_manual_label("worker-1".to_string());
+
+        let p1_id = app.public_pane_id(0, root).unwrap();
+        let p2_id = app.public_pane_id(0, right).unwrap();
+
+        // Send message from p1 (workspace 0) to "worker-1" - should resolve to workspace 0's worker-1 locally
+        let send_res = app.handle_msg_send(
+            "req_1".into(),
+            MsgSendParams {
+                target: "worker-1".into(),
+                body: "hello local worker".into(),
+                sender_pane_id: Some(p1_id.clone()),
+            },
+        );
+        assert!(send_res.contains("msg_send"));
+        let success: SuccessResponse = serde_json::from_str(&send_res).unwrap();
+        let ResponseResult::MsgSend { delivered_to, .. } = success.result else {
+            panic!("Expected MsgSend response");
+        };
+        assert_eq!(delivered_to, vec![p2_id.clone()]);
+    }
+
+    #[test]
+    fn test_all_excludes_sender() {
+        let mut app = app_with_workspace();
+        let root = app.state.workspaces[0].tabs[0].root_pane;
+        let right = app.state.workspaces[0].test_split(Direction::Horizontal);
+        app.state.ensure_test_terminals();
+
+        let p1_id = app.public_pane_id(0, root).unwrap();
+        let p2_id = app.public_pane_id(0, right).unwrap();
+
+        // Send to @all from p1
+        let send_res = app.handle_msg_send(
+            "req_1".into(),
+            MsgSendParams {
+                target: "@all".into(),
+                body: "broadcast".into(),
+                sender_pane_id: Some(p1_id.clone()),
+            },
+        );
+        let success: SuccessResponse = serde_json::from_str(&send_res).unwrap();
+        let ResponseResult::MsgSend { delivered_to, .. } = success.result else {
+            panic!("Expected MsgSend response");
+        };
+        // delivered_to should include p2, but exclude p1
+        assert!(delivered_to.contains(&p2_id));
+        assert!(!delivered_to.contains(&p1_id));
+    }
+
+    #[test]
+    fn test_alias_pane_id_resolves_to_canonical_inbox() {
+        let mut app = app_with_workspace();
+        let root = app.state.workspaces[0].tabs[0].root_pane;
+        app.state.ensure_test_terminals();
+
+        let canonical = app.public_pane_id(0, root).unwrap();
+        let alias = format!("p_{}", root.raw());
+        assert_ne!(alias, canonical);
+
+        app.state
+            .msg_bus
+            .deliver(
+                &canonical,
+                crate::msg::StoredMsg {
+                    seq: 0,
+                    from_pane_id: None,
+                    from_workspace_id: None,
+                    from_label: "external".into(),
+                    to: canonical.clone(),
+                    body: "hello".into(),
+                    timestamp: "2026-07-18T00:00:00Z".into(),
+                },
+            )
+            .unwrap();
+
+        // msg.list under the alias id must read the canonical inbox.
+        let list_res = app.handle_msg_list(
+            "req_1".into(),
+            MsgListParams {
+                pane_id: alias.clone(),
+                after_seq: None,
+                include_read: Some(true),
+            },
+        );
+        let success: SuccessResponse = serde_json::from_str(&list_res).unwrap();
+        let ResponseResult::MsgList { messages, unread, .. } = success.result else {
+            panic!("Expected MsgList response");
+        };
+        assert_eq!(messages.len(), 1);
+        assert_eq!(messages[0].body, "hello");
+        assert_eq!(unread, 1);
+
+        // msg.ack under the alias id must move the canonical ack cursor.
+        let ack_res = app.handle_msg_ack(
+            "req_2".into(),
+            MsgAckParams {
+                pane_id: alias.clone(),
+                up_to_seq: 1,
+            },
+        );
+        let success: SuccessResponse = serde_json::from_str(&ack_res).unwrap();
+        let ResponseResult::MsgAck { ack_seq } = success.result else {
+            panic!("Expected MsgAck response");
+        };
+        assert_eq!(ack_seq, 1);
+        assert_eq!(app.state.msg_bus.unread(&canonical), 0);
+
+        // group join/leave under the alias id must key on the canonical id.
+        let join_res = app.handle_msg_group_join(
+            "req_3".into(),
+            MsgGroupJoinParams {
+                pane_id: alias.clone(),
+                group: "devs".into(),
+            },
+        );
+        assert!(join_res.contains("msg_group"));
+        assert_eq!(
+            app.state.msg_bus.group_members("devs"),
+            vec![canonical.clone()]
+        );
+
+        let leave_res = app.handle_msg_group_leave(
+            "req_4".into(),
+            MsgGroupLeaveParams {
+                pane_id: alias,
+                group: "devs".into(),
+            },
+        );
+        assert!(leave_res.contains("msg_group"));
+        assert!(app.state.msg_bus.group_members("devs").is_empty());
+    }
+
+    #[test]
+    fn test_all_excludes_sender_given_alias_sender_id() {
+        let mut app = app_with_workspace();
+        let root = app.state.workspaces[0].tabs[0].root_pane;
+        let right = app.state.workspaces[0].test_split(Direction::Horizontal);
+        app.state.ensure_test_terminals();
+
+        let p1_id = app.public_pane_id(0, root).unwrap();
+        let p2_id = app.public_pane_id(0, right).unwrap();
+        let alias = format!("p_{}", root.raw());
+        assert_ne!(alias, p1_id);
+
+        let send_res = app.handle_msg_send(
+            "req_1".into(),
+            MsgSendParams {
+                target: "@all".into(),
+                body: "broadcast".into(),
+                sender_pane_id: Some(alias),
+            },
+        );
+        let success: SuccessResponse = serde_json::from_str(&send_res).unwrap();
+        let ResponseResult::MsgSend { delivered_to, message } = success.result else {
+            panic!("Expected MsgSend response");
+        };
+        assert!(delivered_to.contains(&p2_id));
+        assert!(!delivered_to.contains(&p1_id));
+        // Stored sender id is the canonical public id, not the alias form.
+        let message = message.expect("non-empty fanout carries a message");
+        assert_eq!(message.from_pane_id, Some(p1_id));
+    }
+
+    #[test]
+    fn test_unresolvable_sender_pane_id_is_rejected() {
+        let mut app = app_with_workspace();
+        let root = app.state.workspaces[0].tabs[0].root_pane;
+        app.state.ensure_test_terminals();
+        let p1_id = app.public_pane_id(0, root).unwrap();
+
+        // A PROVIDED sender id that does not resolve to a live pane must be
+        // rejected, never passed through verbatim (or as a blank identity).
+        for bogus in ["", "   ", "w9:p9", "not-a-pane"] {
+            let res = app.handle_msg_send(
+                "req".into(),
+                MsgSendParams {
+                    target: "@all".into(),
+                    body: "hi".into(),
+                    sender_pane_id: Some(bogus.into()),
+                },
+            );
+            assert!(
+                res.contains("pane_not_found"),
+                "sender {bogus:?} should be rejected, got: {res}"
+            );
+        }
+        // Nothing was delivered by the rejected sends.
+        assert_eq!(app.state.msg_bus.unread(&p1_id), 0);
+
+        // Absent sender id still means external identity and delivers.
+        let res = app.handle_msg_send(
+            "req_ok".into(),
+            MsgSendParams {
+                target: "@all".into(),
+                body: "hi".into(),
+                sender_pane_id: None,
+            },
+        );
+        let success: SuccessResponse = serde_json::from_str(&res).unwrap();
+        let ResponseResult::MsgSend { delivered_to, message } = success.result else {
+            panic!("Expected MsgSend response");
+        };
+        assert_eq!(delivered_to, vec![p1_id]);
+        let message = message.expect("non-empty fanout carries a message");
+        assert_eq!(message.from_pane_id, None);
+        assert_eq!(message.from_label, "external");
+    }
+
+    #[test]
+    fn test_empty_fanout_checks_size_and_omits_message() {
+        let mut app = app_with_workspace();
+        let root = app.state.workspaces[0].tabs[0].root_pane;
+        app.state.ensure_test_terminals();
+        let p1_id = app.public_pane_id(0, root).unwrap();
+
+        // Oversized body must fail even when @all excludes the only pane
+        // (empty fan-out must not bypass the 64 KiB cap).
+        let res = app.handle_msg_send(
+            "req_1".into(),
+            MsgSendParams {
+                target: "@all".into(),
+                body: "a".repeat(65 * 1024),
+                sender_pane_id: Some(p1_id.clone()),
+            },
+        );
+        assert!(res.contains("message_too_large"));
+
+        // In-cap body with zero recipients: empty delivered_to, null message
+        // (no bogus seq:0 message object).
+        let res = app.handle_msg_send(
+            "req_2".into(),
+            MsgSendParams {
+                target: "@all".into(),
+                body: "hello".into(),
+                sender_pane_id: Some(p1_id.clone()),
+            },
+        );
+        let success: SuccessResponse = serde_json::from_str(&res).unwrap();
+        let ResponseResult::MsgSend { delivered_to, message } = success.result else {
+            panic!("Expected MsgSend response");
+        };
+        assert!(delivered_to.is_empty());
+        assert!(message.is_none());
+        assert!(!res.contains("\"seq\":0"));
+        assert_eq!(app.state.msg_bus.unread(&p1_id), 0);
+    }
+
+    #[test]
+    fn test_oversized_body() {
+        let mut app = app_with_workspace();
+        let _root = app.state.workspaces[0].tabs[0].root_pane;
+        app.state.ensure_test_terminals();
+
+        let body = "a".repeat(65 * 1024); // 65 KiB > 64 KiB cap
+        let send_res = app.handle_msg_send(
+            "req_1".into(),
+            MsgSendParams {
+                target: "@all".into(),
+                body,
+                sender_pane_id: None,
+            },
+        );
+        assert!(send_res.contains("message_too_large"));
+    }
+
+    #[test]
+    fn test_msg_who_and_groups() {
+        let mut app = app_with_workspace();
+        let root = app.state.workspaces[0].tabs[0].root_pane;
+        let right = app.state.workspaces[0].test_split(Direction::Horizontal);
+        app.state.ensure_test_terminals();
+
+        let root_term_id = app.state.workspaces[0].terminal_id(root).cloned().unwrap();
+        let right_term_id = app.state.workspaces[0].terminal_id(right).cloned().unwrap();
+
+        app.state.terminals.get_mut(&root_term_id).unwrap().set_manual_label("orchestrator".to_string());
+        app.state.terminals.get_mut(&right_term_id).unwrap().set_manual_label("worker-1".to_string());
+
+        let p1_id = app.public_pane_id(0, root).unwrap();
+        let p2_id = app.public_pane_id(0, right).unwrap();
+
+        // Join p2 to group "workers"
+        let join_res = app.handle_msg_group_join(
+            "req_1".into(),
+            MsgGroupJoinParams {
+                pane_id: p2_id.clone(),
+                group: "workers".into(),
+            },
+        );
+        assert!(join_res.contains("msg_group"));
+
+        // Who query
+        let who_res = app.handle_msg_who("req_2".into());
+        let success: SuccessResponse = serde_json::from_str(&who_res).unwrap();
+        let ResponseResult::MsgWho { panes, groups } = success.result else {
+            panic!("Expected MsgWho response");
+        };
+
+        // Assert panes
+        assert_eq!(panes.len(), 2);
+        assert_eq!(panes[0].pane_id, p1_id);
+        assert_eq!(panes[0].groups.len(), 0);
+        assert_eq!(panes[1].pane_id, p2_id);
+        assert_eq!(panes[1].groups, vec!["workers".to_string()]);
+
+        // Assert groups
+        assert_eq!(groups.len(), 1);
+        assert_eq!(groups[0].name, "workers");
+        assert_eq!(groups[0].members, vec![p2_id.clone()]);
+
+        // Leave group
+        let leave_res = app.handle_msg_group_leave(
+            "req_3".into(),
+            MsgGroupLeaveParams {
+                pane_id: p2_id.clone(),
+                group: "workers".into(),
+            },
+        );
+        assert!(leave_res.contains("msg_group"));
+    }
+}

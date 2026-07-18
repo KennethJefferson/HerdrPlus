@@ -424,6 +424,12 @@ fn api_method_name(method: &Method) -> &'static str {
         Method::PluginPaneOpen(_) => "plugin.pane.open",
         Method::PluginPaneFocus(_) => "plugin.pane.focus",
         Method::PluginPaneClose(_) => "plugin.pane.close",
+        Method::MsgSend(_) => "msg.send",
+        Method::MsgList(_) => "msg.list",
+        Method::MsgAck(_) => "msg.ack",
+        Method::MsgGroupJoin(_) => "msg.group_join",
+        Method::MsgGroupLeave(_) => "msg.group_leave",
+        Method::MsgWho(_) => "msg.who",
     }
 }
 

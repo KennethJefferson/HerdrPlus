@@ -13,6 +13,7 @@ mod session;
 mod tabs;
 mod workspaces;
 mod worktrees;
+mod msg;
 
 use super::{api_helpers::pane_agent_status, App, Mode, OverlayPaneState, ToastKind};
 use crate::events::AppEvent;
@@ -1118,6 +1119,12 @@ impl App {
             Method::PluginPaneClose(params) => {
                 return self.handle_plugin_pane_close(request.id, params);
             }
+            Method::MsgSend(params) => return self.handle_msg_send(request.id, params),
+            Method::MsgList(params) => return self.handle_msg_list(request.id, params),
+            Method::MsgAck(params) => return self.handle_msg_ack(request.id, params),
+            Method::MsgGroupJoin(params) => return self.handle_msg_group_join(request.id, params),
+            Method::MsgGroupLeave(params) => return self.handle_msg_group_leave(request.id, params),
+            Method::MsgWho(_) => return self.handle_msg_who(request.id),
             _ => {
                 return responses::encode_error(
                     request.id,

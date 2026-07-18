@@ -233,20 +233,11 @@ impl App {
         }
         let workspace_id = self.public_workspace_id(index);
         let workspace = self.workspace_info(index);
-        let pane_ids = self
-            .state
-            .workspaces
-            .get(index)
-            .map(|ws| {
-                ws.tabs
-                    .iter()
-                    .flat_map(|tab| tab.layout.pane_ids())
-                    .collect::<Vec<_>>()
-            })
-            .unwrap_or_default();
         self.state.selected = index;
+        // close_selected_workspace owns full teardown — plugin pane records
+        // and msg-bus purge — for EVERY workspace in the close set, including
+        // linked worktree group members closed alongside the requested one.
         self.state.close_selected_workspace();
-        self.state.remove_plugin_pane_records(pane_ids);
         self.shutdown_detached_terminal_runtimes();
         self.emit_event(EventEnvelope {
             event: EventKind::WorkspaceClosed,
