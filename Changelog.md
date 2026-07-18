@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 This file is append-only: new entries go on top, existing entries are never rewritten.
 
+## [0.3.0] - 2026-07-18
+
+### Added
+
+- Inter-pane messaging ("msg") bus: per-pane inboxes, label-based addressing, group support (`@devs`, `@all`), subscription-based waiting, and a CLI subcommand interface (`herdrplus msg`).
+- Visible unread message indicator (✉ <count>) on the TUI pane border title when unread messages are present.
+- Protocol bumped 17 → 18. Design: `docs/superpowers/specs/2026-07-18-pane-comms-design.md`.
+
 ## [0.2.1] - 2026-07-18
 
 ### Changed

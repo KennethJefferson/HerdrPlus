@@ -36,6 +36,7 @@ pub(super) fn command() -> Command {
         .subcommand(notification_command())
         .subcommand(agent_command())
         .subcommand(pane_command())
+        .subcommand(msg_command())
         .subcommand(wait_command())
         .subcommand(terminal_command())
         .subcommand(session_command())
@@ -473,6 +474,60 @@ fn pane_command() -> Command {
         .subcommand(report_agent_session_command())
         .subcommand(release_agent_command())
         .subcommand(report_metadata_command())
+}
+
+fn msg_command() -> Command {
+    Command::new("msg")
+        .about("Pane communication layer")
+        .subcommand(
+            Command::new("send")
+                .about("Send a message to a pane or group")
+                .arg(required("target", "TARGET"))
+                .arg(required("text", "TEXT")),
+        )
+        .subcommand(
+            Command::new("read")
+                .about("Read and acknowledge messages for a pane")
+                .arg(flag("all"))
+                .arg(option("after", "SEQ"))
+                .arg(option("pane", "PANE_ID")),
+        )
+        .subcommand(
+            Command::new("peek")
+                .about("Read messages without acknowledging")
+                .arg(flag("all"))
+                .arg(option("after", "SEQ"))
+                .arg(option("pane", "PANE_ID")),
+        )
+        .subcommand(
+            Command::new("ack")
+                .about("Acknowledge messages up to a sequence number")
+                .arg(required("up-to-seq", "SEQ"))
+                .arg(option("pane", "PANE_ID")),
+        )
+        .subcommand(
+            Command::new("wait")
+                .about("Wait for new messages")
+                .arg(option("timeout", "MS"))
+                .arg(option("pane", "PANE_ID")),
+        )
+        .subcommand(
+            Command::new("group")
+                .about("Manage group memberships")
+                .subcommand(
+                    Command::new("join")
+                        .about("Join a group")
+                        .arg(required("name", "NAME"))
+                        .arg(option("pane", "PANE_ID")),
+                )
+                .subcommand(
+                    Command::new("leave")
+                        .about("Leave a group")
+                        .arg(required("name", "NAME"))
+                        .arg(option("pane", "PANE_ID")),
+                ),
+        )
+        .subcommand(Command::new("who").about("Show messaging directory"))
 }
 
 fn report_agent_command() -> Command {
