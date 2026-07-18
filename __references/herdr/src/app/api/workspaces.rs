@@ -244,8 +244,13 @@ impl App {
                     .collect::<Vec<_>>()
             })
             .unwrap_or_default();
+        let removed_public_pane_ids = self
+            .state
+            .public_pane_ids_for_removal(index, pane_ids.iter().copied());
         self.state.selected = index;
         self.state.close_selected_workspace();
+        self.state
+            .msg_bus_remove_public_pane_ids(&removed_public_pane_ids);
         self.state.remove_plugin_pane_records(pane_ids);
         self.shutdown_detached_terminal_runtimes();
         self.emit_event(EventEnvelope {

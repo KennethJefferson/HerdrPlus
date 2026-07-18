@@ -7,11 +7,19 @@ use crate::app::App;
 use crate::app::api::responses::{encode_error, encode_success};
 
 impl App {
+    /// Canonical public pane id for any accepted pane-id form (`p_N`,
+    /// `ws-N`, post-restore aliases, ...). The msg bus is keyed exclusively
+    /// on canonical ids, so every msg.* handler must resolve through here.
+    fn canonical_pane_id(&self, raw: &str) -> Option<String> {
+        let (ws_idx, pane_id) = self.parse_pane_id(raw)?;
+        self.public_pane_id(ws_idx, pane_id)
+    }
+
     pub(super) fn handle_msg_send(&mut self, id: String, params: MsgSendParams) -> String {
         let target = match crate::msg::MsgBus::parse_target(&params.target) {
             Ok(t) => t,
             Err(e) => {
-                return encode_error(id, "invalid_target", format!("failed to parse target: {e:?}"));
+                return resolve_error_response(id, None, &e);
             }
         };
 
@@ -30,55 +38,44 @@ impl App {
             }
         }
 
-        let sender_workspace = if let Some(ref sender_id) = params.sender_pane_id {
-            if let Some((ws_idx, _)) = self.parse_pane_id(sender_id) {
-                Some(self.public_workspace_id(ws_idx))
-            } else {
-                None
-            }
-        } else {
-            None
-        };
+        let parsed_sender = params
+            .sender_pane_id
+            .as_deref()
+            .and_then(|raw| self.parse_pane_id(raw));
+        let sender_workspace = parsed_sender.map(|(ws_idx, _)| self.public_workspace_id(ws_idx));
+        // Canonical sender id: bus keys, sender exclusion, and the stored
+        // from_pane_id all use the canonical public id, never the raw
+        // claimed form. Unresolvable claims are passed through verbatim.
+        let sender_pane_id = params.sender_pane_id.as_deref().map(|raw| {
+            parsed_sender
+                .and_then(|(ws_idx, pane_id)| self.public_pane_id(ws_idx, pane_id))
+                .unwrap_or_else(|| raw.to_string())
+        });
 
         let mut resolved = match self.state.msg_bus.resolve(&target, sender_workspace.as_deref(), &directory) {
             Ok(r) => r,
             Err(e) => {
-                let msg = match e {
-                    crate::msg::ResolveError::NotFound => "target not found".to_string(),
-                    crate::msg::ResolveError::Ambiguous(candidates) => {
-                        format!("target is ambiguous, matches: {:?}", candidates)
-                    }
-                    crate::msg::ResolveError::Unaddressable(expr) => {
-                        format!("target is unaddressable: {}", expr)
-                    }
-                    crate::msg::ResolveError::EmptyGroup(g) => {
-                        format!("group {} is empty or unknown", g)
-                    }
-                };
-                return encode_error(id, "invalid_target", msg);
+                return resolve_error_response(id, Some(&target), &e);
             }
         };
 
         if matches!(target, crate::msg::MsgTarget::All) {
-            if let Some(ref sender_id) = params.sender_pane_id {
+            if let Some(ref sender_id) = sender_pane_id {
                 resolved.retain(|pane_id| pane_id != sender_id);
             }
         }
 
-        let from_label = if let Some(ref sender_id) = params.sender_pane_id {
-            if let Some((ws_idx, pane_id)) = self.parse_pane_id(sender_id) {
-                if let Some(pane) = self.state.workspaces.get(ws_idx).and_then(|ws| ws.pane_state(pane_id)) {
-                    if let Some(terminal) = self.state.terminals.get(&pane.attached_terminal_id) {
-                        terminal.manual_label.clone().unwrap_or_default()
-                    } else {
-                        "".to_string()
-                    }
-                } else {
-                    "".to_string()
-                }
-            } else {
-                "".to_string()
-            }
+        let from_label = if params.sender_pane_id.is_some() {
+            parsed_sender
+                .and_then(|(ws_idx, pane_id)| {
+                    self.state
+                        .workspaces
+                        .get(ws_idx)
+                        .and_then(|ws| ws.pane_state(pane_id))
+                })
+                .and_then(|pane| self.state.terminals.get(&pane.attached_terminal_id))
+                .and_then(|terminal| terminal.manual_label.clone())
+                .unwrap_or_default()
         } else {
             "external".to_string()
         };
@@ -97,7 +94,7 @@ impl App {
             }
             let msg = crate::msg::StoredMsg {
                 seq,
-                from_pane_id: params.sender_pane_id.clone(),
+                from_pane_id: sender_pane_id.clone(),
                 from_workspace_id: sender_workspace.clone(),
                 from_label: from_label.clone(),
                 to: params.target.clone(),
@@ -125,7 +122,7 @@ impl App {
             delivered_to: resolved,
             message: MsgInfo {
                 seq: first_seq,
-                from_pane_id: params.sender_pane_id,
+                from_pane_id: sender_pane_id,
                 from_workspace_id: sender_workspace,
                 from_label,
                 to: params.target,
@@ -140,13 +137,13 @@ impl App {
     }
 
     pub(super) fn handle_msg_list(&mut self, id: String, params: MsgListParams) -> String {
-        if self.parse_pane_id(&params.pane_id).is_none() {
+        let Some(pane_id) = self.canonical_pane_id(&params.pane_id) else {
             return encode_error(id, "pane_not_found", format!("pane {} not found", params.pane_id));
-        }
+        };
 
         let include_read = params.include_read.unwrap_or(true);
         let (messages, unread, dropped, ack_seq) = self.state.msg_bus.list(
-            &params.pane_id,
+            &pane_id,
             params.after_seq,
             include_read,
         );
@@ -176,21 +173,21 @@ impl App {
     }
 
     pub(super) fn handle_msg_ack(&mut self, id: String, params: MsgAckParams) -> String {
-        if self.parse_pane_id(&params.pane_id).is_none() {
+        let Some(pane_id) = self.canonical_pane_id(&params.pane_id) else {
             return encode_error(id, "pane_not_found", format!("pane {} not found", params.pane_id));
-        }
+        };
 
-        let ack_seq = self.state.msg_bus.ack(&params.pane_id, params.up_to_seq);
+        let ack_seq = self.state.msg_bus.ack(&pane_id, params.up_to_seq);
 
         encode_success(id, ResponseResult::MsgAck { ack_seq })
     }
 
     pub(super) fn handle_msg_group_join(&mut self, id: String, params: MsgGroupJoinParams) -> String {
-        if self.parse_pane_id(&params.pane_id).is_none() {
+        let Some(pane_id) = self.canonical_pane_id(&params.pane_id) else {
             return encode_error(id, "pane_not_found", format!("pane {} not found", params.pane_id));
-        }
+        };
 
-        match self.state.msg_bus.group_join(&params.pane_id, &params.group) {
+        match self.state.msg_bus.group_join(&pane_id, &params.group) {
             Ok(groups) => encode_success(id, ResponseResult::MsgGroup { groups }),
             Err(e) => {
                 let code = match e {
@@ -203,11 +200,11 @@ impl App {
     }
 
     pub(super) fn handle_msg_group_leave(&mut self, id: String, params: MsgGroupLeaveParams) -> String {
-        if self.parse_pane_id(&params.pane_id).is_none() {
+        let Some(pane_id) = self.canonical_pane_id(&params.pane_id) else {
             return encode_error(id, "pane_not_found", format!("pane {} not found", params.pane_id));
-        }
+        };
 
-        match self.state.msg_bus.group_leave(&params.pane_id, &params.group) {
+        match self.state.msg_bus.group_leave(&pane_id, &params.group) {
             Ok(groups) => encode_success(id, ResponseResult::MsgGroup { groups }),
             Err(e) => {
                 let code = match e {
@@ -262,6 +259,54 @@ impl App {
         groups.sort_by(|a, b| a.name.cmp(&b.name));
 
         encode_success(id, ResponseResult::MsgWho { panes, groups })
+    }
+}
+
+/// Map target parse/resolve failures to distinct wire error codes
+/// (protocol 18): `pane_not_found`, `unknown_target`, `ambiguous_target`,
+/// `empty_group`, `unaddressable_label`.
+///
+/// `target` is `None` when parsing itself failed (only unaddressable
+/// expressions fail to parse).
+fn resolve_error_response(
+    id: String,
+    target: Option<&crate::msg::MsgTarget>,
+    err: &crate::msg::ResolveError,
+) -> String {
+    use crate::msg::{MsgTarget, ResolveError};
+    match err {
+        ResolveError::NotFound => match target {
+            Some(MsgTarget::PaneId(pane_id)) => encode_error(
+                id,
+                "pane_not_found",
+                format!("pane {pane_id} not found"),
+            ),
+            _ => encode_error(id, "unknown_target", "no pane matches target"),
+        },
+        ResolveError::Ambiguous(candidates) => {
+            let formatted = candidates
+                .iter()
+                .map(|(workspace_id, label, pane_id)| {
+                    format!("{workspace_id}/{label} ({pane_id})")
+                })
+                .collect::<Vec<_>>()
+                .join(", ");
+            encode_error(
+                id,
+                "ambiguous_target",
+                format!("target is ambiguous, matches: {formatted}"),
+            )
+        }
+        ResolveError::Unaddressable(expr) => encode_error(
+            id,
+            "unaddressable_label",
+            format!("target is unaddressable: {expr}"),
+        ),
+        ResolveError::EmptyGroup(group) => encode_error(
+            id,
+            "empty_group",
+            format!("group {group} is empty or unknown"),
+        ),
     }
 }
 
@@ -415,8 +460,72 @@ mod tests {
                 sender_pane_id: None,
             },
         );
-        assert!(send_res.contains("invalid_target"));
-        assert!(send_res.contains("target is ambiguous"));
+        assert!(send_res.contains("ambiguous_target"));
+        assert!(send_res.contains("target is ambiguous, matches:"));
+        // Candidates formatted as workspace_id/label (pane_id), not Debug.
+        assert!(send_res.contains("/worker-1 ("));
+        assert!(!send_res.contains("Ambiguous"));
+    }
+
+    #[test]
+    fn test_send_error_codes_are_distinct() {
+        let mut app = app_with_workspace();
+        app.state.ensure_test_terminals();
+
+        // Unknown pane id → pane_not_found.
+        let res = app.handle_msg_send(
+            "req_1".into(),
+            MsgSendParams {
+                target: "w9:p9".into(),
+                body: "hi".into(),
+                sender_pane_id: None,
+            },
+        );
+        assert!(res.contains("pane_not_found"));
+
+        // Unknown label → unknown_target.
+        let res = app.handle_msg_send(
+            "req_2".into(),
+            MsgSendParams {
+                target: "no-such-label".into(),
+                body: "hi".into(),
+                sender_pane_id: None,
+            },
+        );
+        assert!(res.contains("unknown_target"));
+
+        // Unknown / empty group → empty_group.
+        let res = app.handle_msg_send(
+            "req_3".into(),
+            MsgSendParams {
+                target: "@ghosts".into(),
+                body: "hi".into(),
+                sender_pane_id: None,
+            },
+        );
+        assert!(res.contains("empty_group"));
+
+        // Unaddressable label (multi-segment) → unaddressable_label.
+        let res = app.handle_msg_send(
+            "req_4".into(),
+            MsgSendParams {
+                target: "a/b/c".into(),
+                body: "hi".into(),
+                sender_pane_id: None,
+            },
+        );
+        assert!(res.contains("unaddressable_label"));
+
+        // Empty target expression → unaddressable_label.
+        let res = app.handle_msg_send(
+            "req_5".into(),
+            MsgSendParams {
+                target: "".into(),
+                body: "hi".into(),
+                sender_pane_id: None,
+            },
+        );
+        assert!(res.contains("unaddressable_label"));
     }
 
     #[test]
@@ -483,6 +592,119 @@ mod tests {
         // delivered_to should include p2, but exclude p1
         assert!(delivered_to.contains(&p2_id));
         assert!(!delivered_to.contains(&p1_id));
+    }
+
+    #[test]
+    fn test_alias_pane_id_resolves_to_canonical_inbox() {
+        let mut app = app_with_workspace();
+        let root = app.state.workspaces[0].tabs[0].root_pane;
+        app.state.ensure_test_terminals();
+
+        let canonical = app.public_pane_id(0, root).unwrap();
+        let alias = format!("p_{}", root.raw());
+        assert_ne!(alias, canonical);
+
+        app.state
+            .msg_bus
+            .deliver(
+                &canonical,
+                crate::msg::StoredMsg {
+                    seq: 0,
+                    from_pane_id: None,
+                    from_workspace_id: None,
+                    from_label: "external".into(),
+                    to: canonical.clone(),
+                    body: "hello".into(),
+                    timestamp: "2026-07-18T00:00:00Z".into(),
+                },
+            )
+            .unwrap();
+
+        // msg.list under the alias id must read the canonical inbox.
+        let list_res = app.handle_msg_list(
+            "req_1".into(),
+            MsgListParams {
+                pane_id: alias.clone(),
+                after_seq: None,
+                include_read: Some(true),
+            },
+        );
+        let success: SuccessResponse = serde_json::from_str(&list_res).unwrap();
+        let ResponseResult::MsgList { messages, unread, .. } = success.result else {
+            panic!("Expected MsgList response");
+        };
+        assert_eq!(messages.len(), 1);
+        assert_eq!(messages[0].body, "hello");
+        assert_eq!(unread, 1);
+
+        // msg.ack under the alias id must move the canonical ack cursor.
+        let ack_res = app.handle_msg_ack(
+            "req_2".into(),
+            MsgAckParams {
+                pane_id: alias.clone(),
+                up_to_seq: 1,
+            },
+        );
+        let success: SuccessResponse = serde_json::from_str(&ack_res).unwrap();
+        let ResponseResult::MsgAck { ack_seq } = success.result else {
+            panic!("Expected MsgAck response");
+        };
+        assert_eq!(ack_seq, 1);
+        assert_eq!(app.state.msg_bus.unread(&canonical), 0);
+
+        // group join/leave under the alias id must key on the canonical id.
+        let join_res = app.handle_msg_group_join(
+            "req_3".into(),
+            MsgGroupJoinParams {
+                pane_id: alias.clone(),
+                group: "devs".into(),
+            },
+        );
+        assert!(join_res.contains("msg_group"));
+        assert_eq!(
+            app.state.msg_bus.group_members("devs"),
+            vec![canonical.clone()]
+        );
+
+        let leave_res = app.handle_msg_group_leave(
+            "req_4".into(),
+            MsgGroupLeaveParams {
+                pane_id: alias,
+                group: "devs".into(),
+            },
+        );
+        assert!(leave_res.contains("msg_group"));
+        assert!(app.state.msg_bus.group_members("devs").is_empty());
+    }
+
+    #[test]
+    fn test_all_excludes_sender_given_alias_sender_id() {
+        let mut app = app_with_workspace();
+        let root = app.state.workspaces[0].tabs[0].root_pane;
+        let right = app.state.workspaces[0].test_split(Direction::Horizontal);
+        app.state.ensure_test_terminals();
+
+        let p1_id = app.public_pane_id(0, root).unwrap();
+        let p2_id = app.public_pane_id(0, right).unwrap();
+        let alias = format!("p_{}", root.raw());
+        assert_ne!(alias, p1_id);
+
+        let send_res = app.handle_msg_send(
+            "req_1".into(),
+            MsgSendParams {
+                target: "@all".into(),
+                body: "broadcast".into(),
+                sender_pane_id: Some(alias),
+            },
+        );
+        let success: SuccessResponse = serde_json::from_str(&send_res).unwrap();
+        let ResponseResult::MsgSend { delivered_to, message } = success.result else {
+            panic!("Expected MsgSend response");
+        };
+        assert!(delivered_to.contains(&p2_id));
+        assert!(!delivered_to.contains(&p1_id));
+        // Stored sender id is the canonical public id, not the alias form.
+        assert_eq!(message.from_pane_id, Some(p1_id));
     }
 
     #[test]

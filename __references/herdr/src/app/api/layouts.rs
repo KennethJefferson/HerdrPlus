@@ -161,10 +161,15 @@ impl App {
                 .state
                 .terminal_ids_for_tab(target_ws_idx, target_tab_idx);
             let plugin_pane_ids = self.state.pane_ids_for_tab(target_ws_idx, target_tab_idx);
+            let removed_public_pane_ids = self
+                .state
+                .public_pane_ids_for_removal(target_ws_idx, plugin_pane_ids.iter().copied());
             let Some(ws) = self.state.workspaces.get_mut(target_ws_idx) else {
                 return encode_error(id, "tab_not_found", "tab not found");
             };
             if ws.close_tab(target_tab_idx) {
+                self.state
+                    .msg_bus_remove_public_pane_ids(&removed_public_pane_ids);
                 self.state.remove_plugin_pane_records(plugin_pane_ids);
                 self.state.remove_unattached_terminal_ids(terminal_ids);
                 self.shutdown_detached_terminal_runtimes();
@@ -524,12 +529,17 @@ impl App {
         };
         let terminal_ids = self.state.terminal_ids_for_tab(ws_idx, tab_idx);
         let plugin_pane_ids = self.state.pane_ids_for_tab(ws_idx, tab_idx);
+        let removed_public_pane_ids = self
+            .state
+            .public_pane_ids_for_removal(ws_idx, plugin_pane_ids.iter().copied());
         if self
             .state
             .workspaces
             .get_mut(ws_idx)
             .is_some_and(|ws| ws.close_tab(tab_idx))
         {
+            self.state
+                .msg_bus_remove_public_pane_ids(&removed_public_pane_ids);
             self.state.remove_plugin_pane_records(plugin_pane_ids);
             self.state.remove_unattached_terminal_ids(terminal_ids);
             self.shutdown_detached_terminal_runtimes();

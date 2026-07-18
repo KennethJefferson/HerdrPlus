@@ -385,6 +385,38 @@ fn msg_wait(args: &[String]) -> std::io::Result<i32> {
         }
     };
 
+    let read_timeout = parsed.timeout_ms.map(std::time::Duration::from_millis);
+    let client = crate::api::client::ApiClient::local();
+
+    // Ordering invariant (missed-wakeup race): subscribe BEFORE the baseline
+    // msg.list. A message delivered between a list and a later subscribe
+    // would emit its MsgReceived event while nobody is listening, so wait
+    // would block until the NEXT message or the timeout. Subscribing first
+    // closes the window: anything delivered before the baseline list shows
+    // up in that list (handled below without blocking), and anything
+    // delivered after it fires an event on the already-open subscription.
+    let request = Request {
+        id: "cli:msg:wait:subscribe".into(),
+        method: Method::EventsSubscribe(crate::api::schema::EventsSubscribeParams {
+            subscriptions: vec![crate::api::schema::Subscription::PaneMsgReceived {
+                pane_id: pane_id.clone(),
+            }],
+        }),
+    };
+
+    super::ensure_server_protocol_compatible(&client, &request.id)?;
+    let (ack, mut stream) = client
+        .subscribe_value(&request, read_timeout)
+        .map_err(super::api_client_error_to_io)?;
+
+    if let Err(err) = crate::api::client::parse_response_value(ack) {
+        if let ApiClientError::ErrorResponse(response) = err {
+            eprintln!("{}", serde_json::to_string(&response).unwrap());
+            return Ok(1);
+        }
+        return Err(super::api_client_error_to_io(err));
+    }
+
     let initial_list_res = super::send_request(&Request {
         id: "cli:msg:wait:initial".into(),
         method: Method::MsgList(MsgListParams {
@@ -410,29 +442,20 @@ fn msg_wait(args: &[String]) -> std::io::Result<i32> {
         }
     }
 
-    let read_timeout = parsed.timeout_ms.map(std::time::Duration::from_millis);
-    let client = crate::api::client::ApiClient::local();
-
-    let request = Request {
-        id: "cli:msg:wait:subscribe".into(),
-        method: Method::EventsSubscribe(crate::api::schema::EventsSubscribeParams {
-            subscriptions: vec![crate::api::schema::Subscription::PaneMsgReceived {
-                pane_id: pane_id.clone(),
-            }],
-        }),
-    };
-
-    super::ensure_server_protocol_compatible(&client, &request.id)?;
-    let (ack, mut stream) = client
-        .subscribe_value(&request, read_timeout)
-        .map_err(super::api_client_error_to_io)?;
-
-    if let Err(err) = crate::api::client::parse_response_value(ack) {
-        if let ApiClientError::ErrorResponse(response) = err {
-            eprintln!("{}", serde_json::to_string(&response).unwrap());
-            return Ok(1);
+    // If unread messages are already present at baseline, print them and
+    // exit without blocking — the events for them may have fired before the
+    // subscription existed.
+    let unread = initial_list_res["result"]["unread"].as_u64().unwrap_or(0);
+    if unread > 0 {
+        let ack_seq = initial_list_res["result"]["ack_seq"].as_u64().unwrap_or(0);
+        if let Some(messages) = initial_list_res["result"]["messages"].as_array() {
+            for msg in messages {
+                if msg["seq"].as_u64().is_some_and(|seq| seq > ack_seq) {
+                    println!("{}", serde_json::to_string(msg).unwrap());
+                }
+            }
         }
-        return Err(super::api_client_error_to_io(err));
+        return Ok(0);
     }
 
     match stream.next_event() {

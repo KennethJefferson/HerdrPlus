@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 This file is append-only: new entries go on top, existing entries are never rewritten.
 
+## [0.3.1] - 2026-07-18
+
+### Fixed
+
+- Msg-bus state (inbox + group membership) is now torn down on every pane-removal path — process death (`handle_pane_died`), tab close, workspace close, and layout-apply tab replacement/rollback — not just API `pane.close`. Dead panes no longer leak inboxes or linger as `@group` members.
+- `msg wait` missed-wakeup race: the CLI now subscribes to `MsgReceived` before taking the baseline `msg.list`; if unread messages already exist at baseline they are printed immediately without blocking.
+- All `msg.*` handlers (`list`, `ack`, `group join/leave`, `send` sender) canonicalize the pane id via the public-id path, so alias forms (`p_N`, post-restore aliases) address the same inbox and group membership as the canonical id; stored `from_pane_id` and `@all` sender exclusion also use the canonical id.
+- `msg.send` failures now return distinct wire error codes per the protocol-18 spec — `pane_not_found`, `unknown_target`, `ambiguous_target` (candidates formatted as `workspace_id/label (pane_id)`), `empty_group`, `unaddressable_label` — instead of a collapsed `invalid_target`.
+
 ## [0.3.0] - 2026-07-18
 
 ### Added

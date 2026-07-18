@@ -1442,6 +1442,33 @@ impl AppState {
             .unwrap_or_default()
     }
 
+    /// Public pane ids for panes still present in `ws_idx`. Must be computed
+    /// BEFORE the panes are removed — the public-number mapping disappears
+    /// with the pane.
+    pub(crate) fn public_pane_ids_for_removal(
+        &self,
+        ws_idx: usize,
+        pane_ids: impl IntoIterator<Item = PaneId>,
+    ) -> Vec<String> {
+        let Some(ws) = self.workspaces.get(ws_idx) else {
+            return Vec::new();
+        };
+        pane_ids
+            .into_iter()
+            .filter_map(|pane_id| ws.public_pane_number(pane_id))
+            .map(|number| crate::workspace::public_pane_id_for_number(&ws.id, number))
+            .collect()
+    }
+
+    /// Tear down message-bus state (inbox + group membership) for removed
+    /// panes. Every pane-removal path must call this so dead panes do not
+    /// leak inboxes or linger as group members.
+    pub(crate) fn msg_bus_remove_public_pane_ids(&mut self, public_pane_ids: &[String]) {
+        for public_pane_id in public_pane_ids {
+            self.msg_bus.remove_pane(public_pane_id);
+        }
+    }
+
     pub(crate) fn terminal_id_for_pane(
         &self,
         ws_idx: usize,
@@ -3054,6 +3081,8 @@ impl AppState {
 
         let pane_terminal_id = self.terminal_id_for_pane(ws_idx, pane_id);
         let workspace_terminal_ids = self.terminal_ids_for_workspace(ws_idx);
+        let removed_public_pane_ids = self.public_pane_ids_for_removal(ws_idx, [pane_id]);
+        self.msg_bus_remove_public_pane_ids(&removed_public_pane_ids);
         self.pane_id_aliases.retain(|_, alias| *alias != pane_id);
         self.public_pane_id_aliases
             .retain(|_, alias| *alias != pane_id);
@@ -4284,6 +4313,47 @@ mod tests {
         assert!(state.selection_autoscroll.is_none());
         assert_eq!(state.workspaces[0].panes.len(), 1);
         assert_eq!(state.workspaces[0].panes.keys().next().unwrap(), &first_id);
+        state.assert_invariants_for_test();
+    }
+
+    #[test]
+    fn pane_died_tears_down_msg_bus_state() {
+        let mut state = app_with_workspaces(&["test"]);
+        let second_id = state.workspaces[0].test_split(Direction::Horizontal);
+        state.ensure_test_terminals();
+
+        let number = state.workspaces[0].public_pane_number(second_id).unwrap();
+        let public_id =
+            crate::workspace::public_pane_id_for_number(&state.workspaces[0].id, number);
+
+        state.msg_bus.group_join(&public_id, "devs").unwrap();
+        state
+            .msg_bus
+            .deliver(
+                &public_id,
+                crate::msg::StoredMsg {
+                    seq: 0,
+                    from_pane_id: None,
+                    from_workspace_id: None,
+                    from_label: "external".into(),
+                    to: public_id.clone(),
+                    body: "hello".into(),
+                    timestamp: "2026-07-18T00:00:00Z".into(),
+                },
+            )
+            .unwrap();
+        assert_eq!(state.msg_bus.next_seq(&public_id), 2);
+
+        state.handle_pane_died(second_id);
+
+        // Inbox gone: seq counter reset, no stored messages.
+        assert_eq!(state.msg_bus.next_seq(&public_id), 1);
+        let (msgs, unread, _, _) = state.msg_bus.list(&public_id, None, true);
+        assert!(msgs.is_empty());
+        assert_eq!(unread, 0);
+        // Group membership gone; "devs" had no other members so it is removed.
+        assert!(state.msg_bus.groups_of(&public_id).is_empty());
+        assert!(state.msg_bus.group_members("devs").is_empty());
         state.assert_invariants_for_test();
     }
 
