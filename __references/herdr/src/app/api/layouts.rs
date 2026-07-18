@@ -3,8 +3,9 @@ use std::path::PathBuf;
 use ratatui::layout::Direction;
 
 use crate::api::schema::{
-    EventData, EventEnvelope, EventKind, LayoutApplyParams, LayoutDescription, LayoutExportParams,
-    LayoutNode, LayoutPane, LayoutSetSplitRatioParams, ResponseResult, SplitDirection,
+    EventData, EventEnvelope, EventKind, LayoutApplyParams, LayoutBalanceParams, LayoutDescription,
+    LayoutExportParams, LayoutNode, LayoutPane, LayoutSetSplitRatioParams, ResponseResult,
+    SplitDirection,
 };
 use crate::app::{App, Mode};
 use crate::layout::{Node, PaneId};
@@ -246,6 +247,38 @@ impl App {
         };
         self.emit_layout_updated_event(ws_idx, tab_idx);
         encode_success(id, ResponseResult::LayoutSplitRatioSet { layout })
+    }
+
+    pub(super) fn handle_layout_balance(
+        &mut self,
+        id: String,
+        params: LayoutBalanceParams,
+    ) -> String {
+        let Some((ws_idx, tab_idx)) = self.resolve_layout_export_target(&LayoutExportParams {
+            tab_id: params.tab_id,
+            pane_id: params.pane_id,
+        }) else {
+            return encode_error(id, "layout_not_found", "layout target not found");
+        };
+
+        let Some(changed) = self
+            .state
+            .workspaces
+            .get_mut(ws_idx)
+            .and_then(|ws| ws.tabs.get_mut(tab_idx))
+            .map(|tab| tab.layout.balance())
+        else {
+            return encode_error(id, "layout_not_found", "layout unavailable");
+        };
+
+        let Some(layout) = self.layout_description(ws_idx, tab_idx) else {
+            return encode_error(id, "layout_not_found", "layout unavailable");
+        };
+        if changed {
+            self.schedule_session_save();
+            self.emit_layout_updated_event(ws_idx, tab_idx);
+        }
+        encode_success(id, ResponseResult::LayoutBalanced { layout, changed })
     }
 
     fn resolve_layout_export_target(&self, params: &LayoutExportParams) -> Option<(usize, usize)> {

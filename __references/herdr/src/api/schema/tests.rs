@@ -1188,3 +1188,15 @@ fn popup_close_request_round_trips() {
     assert_eq!(json["method"], "popup.close");
     assert_eq!(json["params"], serde_json::json!({}));
 }
+
+#[test]
+fn layout_balance_method_serde_round_trip() {
+    let method = Method::LayoutBalance(LayoutBalanceParams {
+        tab_id: None,
+        pane_id: Some("w1:p2".into()),
+    });
+    let json = serde_json::to_value(&method).unwrap();
+    assert_eq!(json["method"], "layout.balance");
+    let back: Method = serde_json::from_value(json).unwrap();
+    assert_eq!(back, method);
+}

@@ -1,9 +1,9 @@
 use crate::api::schema::{
-    EmptyParams, LayoutSetSplitRatioParams, Method, PaneFocusDirectionParams, PaneRenameParams,
-    PaneResizeParams, PaneSplitParams, PaneSwapParams, PaneTarget, PaneZoomParams, TabCreateParams,
-    TabMoveParams, TabRenameParams, TabTarget, WorkspaceCreateParams, WorkspaceMoveParams,
-    WorkspaceRenameParams, WorkspaceTarget, WorktreeCreateParams, WorktreeOpenParams,
-    WorktreeRemoveParams,
+    EmptyParams, LayoutBalanceParams, LayoutSetSplitRatioParams, Method, PaneFocusDirectionParams,
+    PaneRenameParams, PaneResizeParams, PaneSplitParams, PaneSwapParams, PaneTarget,
+    PaneZoomParams, TabCreateParams, TabMoveParams, TabRenameParams, TabTarget,
+    WorkspaceCreateParams, WorkspaceMoveParams, WorkspaceRenameParams, WorkspaceTarget,
+    WorktreeCreateParams, WorktreeOpenParams, WorktreeRemoveParams,
 };
 
 use super::App;
@@ -147,6 +147,15 @@ impl App {
         params: LayoutSetSplitRatioParams,
     ) -> String {
         self.dispatch_runtime_mutation(id, Method::LayoutSetSplitRatio(params))
+    }
+
+    #[allow(dead_code)] // wired to a TUI action in a later task
+    pub(crate) fn runtime_layout_balance(
+        &mut self,
+        id: &'static str,
+        params: LayoutBalanceParams,
+    ) -> String {
+        self.dispatch_runtime_mutation(id, Method::LayoutBalance(params))
     }
 
     pub(crate) fn runtime_worktree_create_deferred(

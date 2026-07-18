@@ -142,6 +142,14 @@ pub struct LayoutSetSplitRatioParams {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
+pub struct LayoutBalanceParams {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tab_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pane_id: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 pub struct LayoutDescription {
     pub workspace_id: String,
     pub tab_id: String,
