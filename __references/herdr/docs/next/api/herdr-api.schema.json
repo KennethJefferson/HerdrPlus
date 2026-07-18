@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "protocol": 16,
+  "protocol": 17,
   "schema_version": 1,
   "schemas": {
     "error_response": {
@@ -1791,6 +1791,23 @@
           "required": [
             "root"
           ],
+          "type": "object"
+        },
+        "LayoutBalanceParams": {
+          "properties": {
+            "pane_id": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "tab_id": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
           "type": "object"
         },
         "LayoutExportParams": {
@@ -4703,6 +4720,22 @@
             },
             "params": {
               "$ref": "#/schemas/request/$defs/LayoutSetSplitRatioParams"
+            }
+          },
+          "required": [
+            "method",
+            "params"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "method": {
+              "const": "layout.balance",
+              "type": "string"
+            },
+            "params": {
+              "$ref": "#/schemas/request/$defs/LayoutBalanceParams"
             }
           },
           "required": [
@@ -8489,6 +8522,26 @@
               "required": [
                 "type",
                 "layout"
+              ],
+              "type": "object"
+            },
+            {
+              "properties": {
+                "changed": {
+                  "type": "boolean"
+                },
+                "layout": {
+                  "$ref": "#/schemas/success_response/$defs/LayoutDescription"
+                },
+                "type": {
+                  "const": "layout_balanced",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "type",
+                "layout",
+                "changed"
               ],
               "type": "object"
             },

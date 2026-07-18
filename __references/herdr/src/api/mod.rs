@@ -41,6 +41,7 @@ pub(crate) fn request_changes_ui(request: &Request) -> bool {
             | Method::TabClose(_)
             | Method::LayoutApply(_)
             | Method::LayoutSetSplitRatio(_)
+            | Method::LayoutBalance(_)
             | Method::AgentRename(_)
             | Method::AgentFocus(_)
             | Method::AgentStart(_)

@@ -352,6 +352,7 @@ pub struct Keybinds {
     pub last_pane: ActionKeybinds,
     pub split_vertical: ActionKeybinds,
     pub split_horizontal: ActionKeybinds,
+    pub balance_panes: ActionKeybinds,
     pub close_pane: ActionKeybinds,
     pub zoom: ActionKeybinds,
     pub resize_mode: ActionKeybinds,
@@ -514,6 +515,7 @@ impl Config {
             last_pane: empty_action!(),
             split_vertical: empty_action!(),
             split_horizontal: empty_action!(),
+            balance_panes: empty_action!(),
             close_pane: empty_action!(),
             zoom: empty_action!(),
             resize_mode: empty_action!(),
@@ -655,6 +657,7 @@ impl Config {
             apply_action!(keybinds.cycle_pane_previous, cycle_pane_previous, source);
             apply_action!(keybinds.split_vertical, split_vertical, source);
             apply_action!(keybinds.split_horizontal, split_horizontal, source);
+            apply_action!(keybinds.balance_panes, balance_panes, source);
             apply_action!(keybinds.close_pane, close_pane, source);
             apply_action!(keybinds.zoom, zoom, source);
             apply_action!(keybinds.resize_mode, resize_mode, source);
@@ -1600,6 +1603,18 @@ next_tab = "prefix+n"
     fn back_and_forth_keybinds_are_unset_by_default() {
         let kb = Config::default().keybinds();
         assert!(kb.last_pane.bindings.is_empty());
+    }
+
+    #[test]
+    fn balance_panes_defaults_to_prefix_equals() {
+        let kb = Config::default().keybinds();
+        assert_eq!(
+            binding_triggers(&kb.balance_panes),
+            vec![BindingTrigger::Prefix((
+                KeyCode::Char('='),
+                KeyModifiers::empty()
+            ))]
+        );
     }
 
     #[test]

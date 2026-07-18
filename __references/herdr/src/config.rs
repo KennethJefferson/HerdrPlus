@@ -150,9 +150,18 @@ command = "lazygit"
         assert!(profile.contains("prefix = \"ctrl+a\""));
         assert!(profile.contains("new_tab = \"prefix+t\""));
         assert!(profile.contains("next_tab = \"prefix+n\""));
+        assert!(profile.contains("balance_panes = \"prefix+=\""));
         assert!(!profile.contains("lazygit"));
         assert!(!profile.contains("command ="));
         assert!(!profile.contains("[[keys.command]]"));
+
+        let round_tripped: Config = toml::from_str(&profile).unwrap();
+        assert!(round_tripped
+            .keybinds()
+            .balance_panes
+            .bindings
+            .iter()
+            .any(|binding| binding.label == "prefix+="));
     }
 
     #[test]

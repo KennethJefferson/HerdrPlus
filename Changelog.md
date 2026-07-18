@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 This file is append-only: new entries go on top, existing entries are never rewritten.
 
+## [0.2.0] - 2026-07-17
+
+### Added
+
+- `herdr pane balance [--tab ID|--pane ID|--current]` — equalize all pane areas in a tab (equal ideal area, split tree preserved). New `layout.balance` socket API method and `prefix+=` TUI keybinding (Vim `Ctrl-W =` muscle memory). Protocol bumped 16 → 17. Design: `docs/superpowers/specs/2026-07-17-pane-balance-design.md`.
+
 ## [0.1.1] - 2026-07-17
 
 ### Changed

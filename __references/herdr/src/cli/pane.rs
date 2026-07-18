@@ -1,11 +1,11 @@
 use crate::api::schema::{
-    Method, PaneCurrentParams, PaneDirection, PaneEdgesParams, PaneFocusDirectionParams,
-    PaneLayoutParams, PaneListParams, PaneMoveDestination, PaneMoveParams, PaneNeighborParams,
-    PaneProcessInfoParams, PaneReadParams, PaneReleaseAgentParams, PaneRenameParams,
-    PaneReportAgentParams, PaneReportAgentSessionParams, PaneReportMetadataParams,
-    PaneResizeParams, PaneSendInputParams, PaneSendKeysParams, PaneSendTextParams, PaneSplitParams,
-    PaneSwapParams, PaneTarget, PaneZoomMode, PaneZoomParams, ReadFormat, ReadSource, Request,
-    SplitDirection,
+    LayoutBalanceParams, Method, PaneCurrentParams, PaneDirection, PaneEdgesParams,
+    PaneFocusDirectionParams, PaneLayoutParams, PaneListParams, PaneMoveDestination,
+    PaneMoveParams, PaneNeighborParams, PaneProcessInfoParams, PaneReadParams,
+    PaneReleaseAgentParams, PaneRenameParams, PaneReportAgentParams, PaneReportAgentSessionParams,
+    PaneReportMetadataParams, PaneResizeParams, PaneSendInputParams, PaneSendKeysParams,
+    PaneSendTextParams, PaneSplitParams, PaneSwapParams, PaneTarget, PaneZoomMode, PaneZoomParams,
+    ReadFormat, ReadSource, Request, SplitDirection,
 };
 
 pub(super) fn run_pane_command(args: &[String]) -> std::io::Result<i32> {
@@ -24,6 +24,7 @@ pub(super) fn run_pane_command(args: &[String]) -> std::io::Result<i32> {
         "edges" => pane_edges(&args[1..]),
         "focus" => pane_focus(&args[1..]),
         "resize" => pane_resize(&args[1..]),
+        "balance" => pane_balance(&args[1..]),
         "zoom" => pane_zoom(&args[1..]),
         "read" => pane_read(&args[1..]),
         "rename" => pane_rename(&args[1..]),
@@ -347,6 +348,71 @@ fn parse_pane_resize_args(args: &[String]) -> Result<PaneResizeParams, String> {
         direction,
         amount,
     })
+}
+
+fn pane_balance(args: &[String]) -> std::io::Result<i32> {
+    let env_pane_id = std::env::var("HERDR_PANE_ID")
+        .ok()
+        .filter(|value| !value.trim().is_empty());
+    let params = match parse_pane_balance_args(args, env_pane_id.as_deref()) {
+        Ok(params) => params,
+        Err(message) => {
+            eprintln!("{message}");
+            return Ok(2);
+        }
+    };
+
+    super::runtime::pane_balance(params)
+}
+
+fn parse_pane_balance_args(
+    args: &[String],
+    env_pane_id: Option<&str>,
+) -> Result<LayoutBalanceParams, String> {
+    let mut tab_id: Option<String> = None;
+    let mut pane_id: Option<String> = None;
+    let mut pane_flag_seen = false;
+    let mut current_flag_seen = false;
+
+    let mut index = 0;
+    while index < args.len() {
+        match args[index].as_str() {
+            "--tab" => {
+                let Some(value) = args.get(index + 1) else {
+                    return Err("missing value for --tab".into());
+                };
+                tab_id = Some(value.clone());
+                index += 2;
+            }
+            "--pane" => {
+                let Some(value) = args.get(index + 1) else {
+                    return Err("missing value for --pane".into());
+                };
+                pane_id = Some(super::normalize_pane_id(value));
+                pane_flag_seen = true;
+                index += 2;
+            }
+            "--current" => {
+                let Some(env_id) = env_pane_id else {
+                    return Err(
+                        "--current requires HERDR_PANE_ID (run inside a herdr pane)".into(),
+                    );
+                };
+                pane_id = Some(super::normalize_pane_id(env_id));
+                current_flag_seen = true;
+                index += 1;
+            }
+            other => return Err(format!("unknown option: {other}")),
+        }
+    }
+
+    if pane_flag_seen && current_flag_seen {
+        return Err("provide only one of --tab or --pane/--current".into());
+    }
+    if tab_id.is_some() && pane_id.is_some() {
+        return Err("provide only one of --tab or --pane/--current".into());
+    }
+    Ok(LayoutBalanceParams { tab_id, pane_id })
 }
 
 fn pane_zoom(args: &[String]) -> std::io::Result<i32> {
@@ -1416,6 +1482,7 @@ fn print_pane_help() {
     eprintln!(
         "  herdr pane resize --direction left|right|up|down [--amount FLOAT] [--pane ID|--current]"
     );
+    eprintln!("  herdr pane balance [--tab TAB_ID|--pane ID|--current]");
     eprintln!("  herdr pane zoom [<pane_id>|--pane ID|--current] [--toggle|--on|--off]");
     eprintln!("  herdr pane rename <pane_id> <label>|--clear");
     eprintln!("  herdr pane read <pane_id> [--source visible|recent|recent-unwrapped] [--lines N] [--format text|ansi] [--ansi]");
@@ -1683,5 +1750,63 @@ mod tests {
         assert_eq!(params.pane_id, Some("issue-2".into()));
         assert_eq!(params.direction, PaneDirection::Left);
         assert_eq!(params.amount, Some(0.125));
+    }
+
+    #[test]
+    fn balance_args_default_to_no_target() {
+        let params = parse_pane_balance_args(&args(&[]), None).unwrap();
+        assert_eq!(params.tab_id, None);
+        assert_eq!(params.pane_id, None);
+    }
+
+    #[test]
+    fn balance_args_accept_tab() {
+        let params = parse_pane_balance_args(&args(&["--tab", "w1:t1"]), None).unwrap();
+        assert_eq!(params.tab_id.as_deref(), Some("w1:t1"));
+        assert_eq!(params.pane_id, None);
+    }
+
+    #[test]
+    fn balance_args_current_resolves_env_pane() {
+        let params = parse_pane_balance_args(&args(&["--current"]), Some("w1:p3")).unwrap();
+        assert_eq!(params.pane_id.as_deref(), Some("w1:p3"));
+    }
+
+    #[test]
+    fn balance_args_current_without_env_errors() {
+        assert!(parse_pane_balance_args(&args(&["--current"]), None).is_err());
+    }
+
+    #[test]
+    fn balance_args_reject_tab_and_pane_together() {
+        assert!(
+            parse_pane_balance_args(&args(&["--tab", "w1:t1", "--pane", "w1:p1"]), None).is_err()
+        );
+    }
+
+    #[test]
+    fn balance_args_accept_pane_only() {
+        let params =
+            parse_pane_balance_args(&args(&["--pane", "w1:p1"]), None).unwrap();
+        assert_eq!(params.pane_id.as_deref(), Some("w1:p1"));
+        assert_eq!(params.tab_id, None);
+    }
+
+    #[test]
+    fn balance_args_reject_pane_then_current() {
+        assert!(parse_pane_balance_args(
+            &args(&["--pane", "w1:p1", "--current"]),
+            Some("w1:p3")
+        )
+        .is_err());
+    }
+
+    #[test]
+    fn balance_args_reject_current_then_pane() {
+        assert!(parse_pane_balance_args(
+            &args(&["--current", "--pane", "w1:p1"]),
+            Some("w1:p3")
+        )
+        .is_err());
     }
 }
