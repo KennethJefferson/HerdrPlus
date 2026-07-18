@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "protocol": 17,
+  "protocol": 18,
   "schema_version": 1,
   "schemas": {
     "error_response": {
@@ -678,6 +678,28 @@
                 "layout"
               ],
               "type": "object"
+            },
+            {
+              "properties": {
+                "pane_id": {
+                  "type": "string"
+                },
+                "seq": {
+                  "format": "uint64",
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                "type": {
+                  "const": "pane_msg_received",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "type",
+                "pane_id",
+                "seq"
+              ],
+              "type": "object"
             }
           ]
         },
@@ -707,7 +729,8 @@
             "pane_exited",
             "pane_agent_detected",
             "pane_agent_status_changed",
-            "layout_updated"
+            "layout_updated",
+            "msg_received"
           ],
           "type": "string"
         },
@@ -1933,6 +1956,99 @@
           "required": [
             "path",
             "ratio"
+          ],
+          "type": "object"
+        },
+        "MsgAckParams": {
+          "properties": {
+            "pane_id": {
+              "type": "string"
+            },
+            "up_to_seq": {
+              "format": "uint64",
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "pane_id",
+            "up_to_seq"
+          ],
+          "type": "object"
+        },
+        "MsgGroupJoinParams": {
+          "properties": {
+            "group": {
+              "type": "string"
+            },
+            "pane_id": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "pane_id",
+            "group"
+          ],
+          "type": "object"
+        },
+        "MsgGroupLeaveParams": {
+          "properties": {
+            "group": {
+              "type": "string"
+            },
+            "pane_id": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "pane_id",
+            "group"
+          ],
+          "type": "object"
+        },
+        "MsgListParams": {
+          "properties": {
+            "after_seq": {
+              "format": "uint64",
+              "minimum": 0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "include_read": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
+            "pane_id": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "pane_id"
+          ],
+          "type": "object"
+        },
+        "MsgSendParams": {
+          "properties": {
+            "body": {
+              "type": "string"
+            },
+            "sender_pane_id": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "target": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "target",
+            "body"
           ],
           "type": "object"
         },
@@ -3629,6 +3745,22 @@
               },
               "required": [
                 "type"
+              ],
+              "type": "object"
+            },
+            {
+              "properties": {
+                "pane_id": {
+                  "type": "string"
+                },
+                "type": {
+                  "const": "pane.msg_received",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "type",
+                "pane_id"
               ],
               "type": "object"
             }
@@ -5367,6 +5499,102 @@
             "params"
           ],
           "type": "object"
+        },
+        {
+          "properties": {
+            "method": {
+              "const": "msg.send",
+              "type": "string"
+            },
+            "params": {
+              "$ref": "#/schemas/request/$defs/MsgSendParams"
+            }
+          },
+          "required": [
+            "method",
+            "params"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "method": {
+              "const": "msg.list",
+              "type": "string"
+            },
+            "params": {
+              "$ref": "#/schemas/request/$defs/MsgListParams"
+            }
+          },
+          "required": [
+            "method",
+            "params"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "method": {
+              "const": "msg.ack",
+              "type": "string"
+            },
+            "params": {
+              "$ref": "#/schemas/request/$defs/MsgAckParams"
+            }
+          },
+          "required": [
+            "method",
+            "params"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "method": {
+              "const": "msg.group_join",
+              "type": "string"
+            },
+            "params": {
+              "$ref": "#/schemas/request/$defs/MsgGroupJoinParams"
+            }
+          },
+          "required": [
+            "method",
+            "params"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "method": {
+              "const": "msg.group_leave",
+              "type": "string"
+            },
+            "params": {
+              "$ref": "#/schemas/request/$defs/MsgGroupLeaveParams"
+            }
+          },
+          "required": [
+            "method",
+            "params"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "method": {
+              "const": "msg.who",
+              "type": "string"
+            },
+            "params": {
+              "$ref": "#/schemas/request/$defs/EmptyParams"
+            }
+          },
+          "required": [
+            "method",
+            "params"
+          ],
+          "type": "object"
         }
       ],
       "properties": {
@@ -5432,6 +5660,23 @@
             "pane_id",
             "workspace_id",
             "agent_status"
+          ],
+          "type": "object"
+        },
+        "PaneMsgReceivedEvent": {
+          "properties": {
+            "pane_id": {
+              "type": "string"
+            },
+            "seq": {
+              "format": "uint64",
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "pane_id",
+            "seq"
           ],
           "type": "object"
         },
@@ -5565,6 +5810,9 @@
             },
             {
               "$ref": "#/schemas/subscription_event/$defs/PaneScrollChangedEvent"
+            },
+            {
+              "$ref": "#/schemas/subscription_event/$defs/PaneMsgReceivedEvent"
             }
           ]
         },
@@ -5572,7 +5820,8 @@
           "enum": [
             "pane.output_matched",
             "pane.agent_status_changed",
-            "pane.scroll_changed"
+            "pane.scroll_changed",
+            "pane.msg_received"
           ],
           "type": "string"
         }
@@ -6425,6 +6674,28 @@
                 "layout"
               ],
               "type": "object"
+            },
+            {
+              "properties": {
+                "pane_id": {
+                  "type": "string"
+                },
+                "seq": {
+                  "format": "uint64",
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                "type": {
+                  "const": "pane_msg_received",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "type",
+                "pane_id",
+                "seq"
+              ],
+              "type": "object"
             }
           ]
         },
@@ -6469,7 +6740,8 @@
             "pane_exited",
             "pane_agent_detected",
             "pane_agent_status_changed",
-            "layout_updated"
+            "layout_updated",
+            "msg_received"
           ],
           "type": "string"
         },
@@ -6717,6 +6989,97 @@
               "type": "object"
             }
           ]
+        },
+        "MsgInfo": {
+          "properties": {
+            "body": {
+              "type": "string"
+            },
+            "from_label": {
+              "type": "string"
+            },
+            "from_pane_id": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "from_workspace_id": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "seq": {
+              "format": "uint64",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "timestamp": {
+              "type": "string"
+            },
+            "to": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "seq",
+            "from_label",
+            "to",
+            "body",
+            "timestamp"
+          ],
+          "type": "object"
+        },
+        "MsgWhoGroupInfo": {
+          "properties": {
+            "members": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "name": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "name",
+            "members"
+          ],
+          "type": "object"
+        },
+        "MsgWhoPaneInfo": {
+          "properties": {
+            "groups": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "label": {
+              "type": "string"
+            },
+            "pane_id": {
+              "type": "string"
+            },
+            "unread": {
+              "format": "uint64",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "workspace_id": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "pane_id",
+            "workspace_id",
+            "label",
+            "groups",
+            "unread"
+          ],
+          "type": "object"
         },
         "NotificationShowReason": {
           "enum": [
@@ -9072,6 +9435,129 @@
                 "type",
                 "status",
                 "diagnostics"
+              ],
+              "type": "object"
+            },
+            {
+              "properties": {
+                "delivered_to": {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                "message": {
+                  "$ref": "#/schemas/success_response/$defs/MsgInfo"
+                },
+                "type": {
+                  "const": "msg_send",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "type",
+                "delivered_to",
+                "message"
+              ],
+              "type": "object"
+            },
+            {
+              "properties": {
+                "ack_seq": {
+                  "format": "uint64",
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                "dropped": {
+                  "format": "uint64",
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                "messages": {
+                  "items": {
+                    "$ref": "#/schemas/success_response/$defs/MsgInfo"
+                  },
+                  "type": "array"
+                },
+                "type": {
+                  "const": "msg_list",
+                  "type": "string"
+                },
+                "unread": {
+                  "format": "uint64",
+                  "minimum": 0,
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "type",
+                "messages",
+                "unread",
+                "dropped",
+                "ack_seq"
+              ],
+              "type": "object"
+            },
+            {
+              "properties": {
+                "ack_seq": {
+                  "format": "uint64",
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                "type": {
+                  "const": "msg_ack",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "type",
+                "ack_seq"
+              ],
+              "type": "object"
+            },
+            {
+              "properties": {
+                "groups": {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                "type": {
+                  "const": "msg_group",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "type",
+                "groups"
+              ],
+              "type": "object"
+            },
+            {
+              "properties": {
+                "groups": {
+                  "items": {
+                    "$ref": "#/schemas/success_response/$defs/MsgWhoGroupInfo"
+                  },
+                  "type": "array"
+                },
+                "panes": {
+                  "items": {
+                    "$ref": "#/schemas/success_response/$defs/MsgWhoPaneInfo"
+                  },
+                  "type": "array"
+                },
+                "type": {
+                  "const": "msg_who",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "type",
+                "panes",
+                "groups"
               ],
               "type": "object"
             },

@@ -12,6 +12,7 @@ pub mod session;
 pub mod tabs;
 pub mod workspaces;
 pub mod worktrees;
+pub mod msg;
 
 pub use agents::*;
 pub use common::*;
@@ -25,6 +26,7 @@ pub use session::*;
 pub use tabs::*;
 pub use workspaces::*;
 pub use worktrees::*;
+pub use msg::*;
 
 fn is_false(value: &bool) -> bool {
     !*value
@@ -227,6 +229,18 @@ pub enum Method {
     PluginPaneFocus(PluginPaneFocusParams),
     #[serde(rename = "plugin.pane.close")]
     PluginPaneClose(PluginPaneCloseParams),
+    #[serde(rename = "msg.send")]
+    MsgSend(MsgSendParams),
+    #[serde(rename = "msg.list")]
+    MsgList(MsgListParams),
+    #[serde(rename = "msg.ack")]
+    MsgAck(MsgAckParams),
+    #[serde(rename = "msg.group_join")]
+    MsgGroupJoin(MsgGroupJoinParams),
+    #[serde(rename = "msg.group_leave")]
+    MsgGroupLeave(MsgGroupLeaveParams),
+    #[serde(rename = "msg.who")]
+    MsgWho(EmptyParams),
 }
 
 #[cfg(test)]

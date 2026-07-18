@@ -62,6 +62,11 @@ pub(super) struct ActiveScrollChangedSubscription {
     request_prefix: String,
 }
 
+pub(super) struct ActiveMsgReceivedSubscription {
+    pane_id: String,
+    last_sequence: u64,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct PanePresentationSnapshot {
     title: Option<String>,
@@ -101,6 +106,7 @@ pub(super) enum ActiveSubscription {
     OutputMatched(ActiveOutputMatchedSubscription),
     AgentStatusChanged(Box<ActiveAgentStatusChangedSubscription>),
     ScrollChanged(ActiveScrollChangedSubscription),
+    MsgReceived(ActiveMsgReceivedSubscription),
 }
 
 impl ActiveSubscription {
@@ -289,6 +295,14 @@ impl ActiveSubscription {
                     request_prefix: format!("{request_id}:sub:{index}"),
                 }))
             }
+            Subscription::PaneMsgReceived { pane_id } => {
+                let probe = pane_get(format!("{request_id}:sub:{index}:probe"), &pane_id, api_tx)?;
+                let last_sequence = event_hub.current_sequence();
+                Ok(Self::MsgReceived(ActiveMsgReceivedSubscription {
+                    pane_id: probe.pane_id,
+                    last_sequence,
+                }))
+            }
         }
     }
 
@@ -307,6 +321,9 @@ impl ActiveSubscription {
             }
             Self::ScrollChanged(subscription) => {
                 serde_json::to_value(subscription.poll(api_tx)?).ok()
+            }
+            Self::MsgReceived(subscription) => {
+                serde_json::to_value(subscription.poll(event_hub)?).ok()
             }
         }
     }
@@ -533,6 +550,28 @@ impl ActiveScrollChangedSubscription {
                 scroll,
             }),
         })
+    }
+}
+
+impl ActiveMsgReceivedSubscription {
+    fn poll(&mut self, event_hub: &EventHub) -> Option<SubscriptionEventEnvelope> {
+        for (sequence, event) in event_hub.events_after(self.last_sequence) {
+            self.last_sequence = sequence;
+            if event.event == crate::api::schema::EventKind::MsgReceived {
+                if let crate::api::schema::EventData::PaneMsgReceived { pane_id, seq } = &event.data {
+                    if pane_id == &self.pane_id {
+                        return Some(SubscriptionEventEnvelope {
+                            event: SubscriptionEventKind::MsgReceived,
+                            data: SubscriptionEventData::MsgReceived(crate::api::schema::PaneMsgReceivedEvent {
+                                pane_id: pane_id.clone(),
+                                seq: *seq,
+                            }),
+                        });
+                    }
+                }
+            }
+        }
+        None
     }
 }
 

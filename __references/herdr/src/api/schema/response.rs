@@ -239,6 +239,26 @@ pub enum ResponseResult {
         status: crate::config::ConfigReloadStatus,
         diagnostics: Vec<String>,
     },
+    MsgSend {
+        delivered_to: Vec<String>,
+        message: super::msg::MsgInfo,
+    },
+    MsgList {
+        messages: Vec<super::msg::MsgInfo>,
+        unread: u64,
+        dropped: u64,
+        ack_seq: u64,
+    },
+    MsgAck {
+        ack_seq: u64,
+    },
+    MsgGroup {
+        groups: Vec<String>,
+    },
+    MsgWho {
+        panes: Vec<super::msg::MsgWhoPaneInfo>,
+        groups: Vec<super::msg::MsgWhoGroupInfo>,
+    },
     Ok {},
 }
 

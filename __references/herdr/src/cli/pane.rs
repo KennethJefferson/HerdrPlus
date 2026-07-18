@@ -394,9 +394,7 @@ fn parse_pane_balance_args(
             }
             "--current" => {
                 let Some(env_id) = env_pane_id else {
-                    return Err(
-                        "--current requires HERDR_PANE_ID (run inside a herdr pane)".into(),
-                    );
+                    return Err("--current requires HERDR_PANE_ID (run inside a herdr pane)".into());
                 };
                 pane_id = Some(super::normalize_pane_id(env_id));
                 current_flag_seen = true;
@@ -1786,27 +1784,24 @@ mod tests {
 
     #[test]
     fn balance_args_accept_pane_only() {
-        let params =
-            parse_pane_balance_args(&args(&["--pane", "w1:p1"]), None).unwrap();
+        let params = parse_pane_balance_args(&args(&["--pane", "w1:p1"]), None).unwrap();
         assert_eq!(params.pane_id.as_deref(), Some("w1:p1"));
         assert_eq!(params.tab_id, None);
     }
 
     #[test]
     fn balance_args_reject_pane_then_current() {
-        assert!(parse_pane_balance_args(
-            &args(&["--pane", "w1:p1", "--current"]),
-            Some("w1:p3")
-        )
-        .is_err());
+        assert!(
+            parse_pane_balance_args(&args(&["--pane", "w1:p1", "--current"]), Some("w1:p3"))
+                .is_err()
+        );
     }
 
     #[test]
     fn balance_args_reject_current_then_pane() {
-        assert!(parse_pane_balance_args(
-            &args(&["--current", "--pane", "w1:p1"]),
-            Some("w1:p3")
-        )
-        .is_err());
+        assert!(
+            parse_pane_balance_args(&args(&["--current", "--pane", "w1:p1"]), Some("w1:p3"))
+                .is_err()
+        );
     }
 }

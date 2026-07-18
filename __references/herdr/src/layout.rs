@@ -523,8 +523,7 @@ fn balance_node(node: &mut Node) -> usize {
         } => {
             let first_leaves = balance_node(first);
             let second_leaves = balance_node(second);
-            *ratio =
-                valid_split_ratio(first_leaves as f32 / (first_leaves + second_leaves) as f32);
+            *ratio = valid_split_ratio(first_leaves as f32 / (first_leaves + second_leaves) as f32);
             first_leaves + second_leaves
         }
     }

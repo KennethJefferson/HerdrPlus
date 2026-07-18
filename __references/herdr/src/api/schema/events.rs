@@ -80,6 +80,8 @@ pub enum Subscription {
     PaneScrollChanged { pane_id: String },
     #[serde(rename = "layout.updated")]
     LayoutUpdated {},
+    #[serde(rename = "pane.msg_received")]
+    PaneMsgReceived { pane_id: String },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
@@ -215,6 +217,7 @@ pub enum EventKind {
     PaneAgentDetected,
     PaneAgentStatusChanged,
     LayoutUpdated,
+    MsgReceived,
 }
 
 impl EventKind {
@@ -245,6 +248,7 @@ impl EventKind {
             EventKind::PaneAgentDetected => "pane.agent_detected",
             EventKind::PaneAgentStatusChanged => "pane.agent_status_changed",
             EventKind::LayoutUpdated => "layout.updated",
+            EventKind::MsgReceived => "pane.msg_received",
         }
     }
 }
@@ -276,6 +280,7 @@ pub const KNOWN_EVENT_KINDS: &[EventKind] = &[
     EventKind::PaneAgentDetected,
     EventKind::PaneAgentStatusChanged,
     EventKind::LayoutUpdated,
+    EventKind::MsgReceived,
 ];
 
 pub const PLUGIN_HOOK_EVENT_KINDS: &[EventKind] = &[
@@ -366,6 +371,8 @@ pub enum SubscriptionEventKind {
     PaneAgentStatusChanged,
     #[serde(rename = "pane.scroll_changed")]
     ScrollChanged,
+    #[serde(rename = "pane.msg_received")]
+    MsgReceived,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
@@ -380,6 +387,13 @@ pub enum SubscriptionEventData {
     PaneOutputMatched(PaneOutputMatchedEvent),
     PaneAgentStatusChanged(PaneAgentStatusChangedEvent),
     ScrollChanged(PaneScrollChangedEvent),
+    MsgReceived(PaneMsgReceivedEvent),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
+pub struct PaneMsgReceivedEvent {
+    pub pane_id: String,
+    pub seq: u64,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
@@ -536,5 +550,9 @@ pub enum EventData {
     },
     LayoutUpdated {
         layout: super::panes::PaneLayoutSnapshot,
+    },
+    PaneMsgReceived {
+        pane_id: String,
+        seq: u64,
     },
 }

@@ -895,8 +895,9 @@ mod tests {
             panic!("expected split layout root");
         };
         assert!((ratio - 0.5).abs() < f32::EPSILON);
-        let Node::Split { ratio: tree_ratio, .. } =
-            app.state.workspaces[0].tabs[0].layout.root()
+        let Node::Split {
+            ratio: tree_ratio, ..
+        } = app.state.workspaces[0].tabs[0].layout.root()
         else {
             panic!("expected split tree root");
         };
