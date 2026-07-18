@@ -9447,7 +9447,14 @@
                   "type": "array"
                 },
                 "message": {
-                  "$ref": "#/schemas/success_response/$defs/MsgInfo"
+                  "anyOf": [
+                    {
+                      "$ref": "#/schemas/success_response/$defs/MsgInfo"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
                 },
                 "type": {
                   "const": "msg_send",
@@ -9456,8 +9463,7 @@
               },
               "required": [
                 "type",
-                "delivered_to",
-                "message"
+                "delivered_to"
               ],
               "type": "object"
             },

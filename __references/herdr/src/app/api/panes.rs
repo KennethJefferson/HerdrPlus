@@ -959,6 +959,16 @@ impl App {
         };
 
         self.state.remove_alias_shadowed_by_new_pane(moved_pane_id);
+        // A cross-workspace move assigns a new canonical public id; move the
+        // msg-bus inbox (seq/ack counters intact) and group membership with
+        // it so the pane's messages are not stranded under the old id.
+        if let Some(new_public_pane_id) = self.public_pane_id(target_ws_idx, moved_pane_id) {
+            if new_public_pane_id != previous_pane_id {
+                self.state
+                    .msg_bus
+                    .rekey_pane(&previous_pane_id, &new_public_pane_id);
+            }
+        }
         self.state.mark_session_dirty();
         self.schedule_session_save();
         let Some(pane) = self.pane_info(target_ws_idx, moved_pane_id) else {
@@ -2613,6 +2623,77 @@ mod tests {
             Some(&source_terminal)
         );
         assert_eq!(app.parse_pane_id(&previous_pane_id), Some((0, source)));
+    }
+
+    #[test]
+    fn api_pane_move_cross_workspace_rekeys_msg_bus_state() {
+        let mut app = app_with_linked_worktree();
+        app.state.workspaces.push(Workspace::test_new("other"));
+        let source = app.state.workspaces[0].tabs[0].root_pane;
+        let target = app.state.workspaces[1].tabs[0].root_pane;
+        seed_terminal_states(&mut app);
+        let previous_pane_id = app.public_pane_id(0, source).unwrap();
+        let target_tab_id = app.public_tab_id(1, 0).unwrap();
+        let target_pane_id = app.public_pane_id(1, target).unwrap();
+
+        let stored = |body: &str| crate::msg::StoredMsg {
+            seq: 0,
+            from_pane_id: None,
+            from_workspace_id: None,
+            from_label: "external".into(),
+            to: previous_pane_id.clone(),
+            body: body.into(),
+            timestamp: "2026-07-18T00:00:00Z".into(),
+        };
+        app.state
+            .msg_bus
+            .group_join(&previous_pane_id, "devs")
+            .unwrap();
+        app.state.msg_bus.deliver(&previous_pane_id, stored("a")).unwrap();
+        app.state.msg_bus.deliver(&previous_pane_id, stored("b")).unwrap();
+        app.state.msg_bus.ack(&previous_pane_id, 1);
+
+        let response = app.handle_pane_move(
+            "req".into(),
+            PaneMoveParams {
+                pane_id: previous_pane_id.clone(),
+                destination: PaneMoveDestination::Tab {
+                    tab_id: target_tab_id,
+                    target_pane_id: Some(target_pane_id),
+                    split: SplitDirection::Down,
+                    ratio: None,
+                },
+                focus: false,
+            },
+        );
+
+        let success: SuccessResponse = serde_json::from_str(&response).unwrap();
+        let ResponseResult::PaneMove { move_result } = success.result else {
+            panic!("expected pane move response");
+        };
+        let new_pane_id = move_result.pane.pane_id.clone();
+        assert_ne!(new_pane_id, previous_pane_id);
+
+        // Inbox travels with the pane: same messages, unread and ack cursor.
+        let (msgs, unread, dropped, ack) = app.state.msg_bus.list(&new_pane_id, None, true);
+        assert_eq!(msgs.len(), 2);
+        assert_eq!(unread, 1);
+        assert_eq!(dropped, 0);
+        assert_eq!(ack, 1);
+        assert_eq!(app.state.msg_bus.next_seq(&new_pane_id), 3);
+        // Group membership follows the new canonical id.
+        assert_eq!(
+            app.state.msg_bus.groups_of(&new_pane_id),
+            vec!["devs".to_string()]
+        );
+        assert_eq!(
+            app.state.msg_bus.group_members("devs"),
+            vec![new_pane_id.clone()]
+        );
+        // Nothing is stranded under the old id.
+        assert_eq!(app.state.msg_bus.next_seq(&previous_pane_id), 1);
+        assert_eq!(app.state.msg_bus.unread(&previous_pane_id), 0);
+        assert!(app.state.msg_bus.groups_of(&previous_pane_id).is_empty());
     }
 
     #[test]

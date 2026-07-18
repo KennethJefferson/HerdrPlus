@@ -22,7 +22,9 @@ pub struct MsgSendParams {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 pub struct MsgSendResult {
     pub delivered_to: Vec<String>,
-    pub message: MsgInfo,
+    /// `None` for zero-recipient sends (empty fan-out): nothing was
+    /// delivered, so there is no message (and no meaningful seq).
+    pub message: Option<MsgInfo>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]

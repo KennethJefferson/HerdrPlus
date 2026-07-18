@@ -16,6 +16,20 @@ impl App {
     }
 
     pub(super) fn handle_msg_send(&mut self, id: String, params: MsgSendParams) -> String {
+        // Enforce the body cap BEFORE resolution/delivery: a zero-recipient
+        // fan-out (e.g. `@all` that excludes the only pane) must not let an
+        // oversized body "succeed" by skipping the per-delivery check.
+        if params.body.len() > crate::msg::MAX_MESSAGE_BODY_BYTES {
+            return encode_error(
+                id,
+                "message_too_large",
+                format!(
+                    "message body exceeds {} byte limit",
+                    crate::msg::MAX_MESSAGE_BODY_BYTES
+                ),
+            );
+        }
+
         let target = match crate::msg::MsgBus::parse_target(&params.target) {
             Ok(t) => t,
             Err(e) => {
@@ -45,12 +59,26 @@ impl App {
         let sender_workspace = parsed_sender.map(|(ws_idx, _)| self.public_workspace_id(ws_idx));
         // Canonical sender id: bus keys, sender exclusion, and the stored
         // from_pane_id all use the canonical public id, never the raw
-        // claimed form. Unresolvable claims are passed through verbatim.
-        let sender_pane_id = params.sender_pane_id.as_deref().map(|raw| {
-            parsed_sender
-                .and_then(|(ws_idx, pane_id)| self.public_pane_id(ws_idx, pane_id))
-                .unwrap_or_else(|| raw.to_string())
-        });
+        // claimed form. A PROVIDED sender id that does not resolve to a live
+        // pane (blank, malformed, or closed) is rejected — only an ABSENT
+        // sender_pane_id means external identity.
+        let sender_pane_id = match params.sender_pane_id.as_deref() {
+            Some(raw) => {
+                let canonical = parsed_sender
+                    .and_then(|(ws_idx, pane_id)| self.public_pane_id(ws_idx, pane_id));
+                match canonical {
+                    Some(canonical) => Some(canonical),
+                    None => {
+                        return encode_error(
+                            id,
+                            "pane_not_found",
+                            format!("sender pane {raw} not found"),
+                        );
+                    }
+                }
+            }
+            None => None,
+        };
 
         let mut resolved = match self.state.msg_bus.resolve(&target, sender_workspace.as_deref(), &directory) {
             Ok(r) => r,
@@ -118,17 +146,21 @@ impl App {
             });
         }
 
+        // Zero-recipient sends (e.g. `@all` excluding the only pane) return
+        // an empty delivered_to and a null message — never a bogus seq:0
+        // message object that was delivered nowhere.
+        let message = (!resolved.is_empty()).then(|| MsgInfo {
+            seq: first_seq,
+            from_pane_id: sender_pane_id,
+            from_workspace_id: sender_workspace,
+            from_label,
+            to: params.target,
+            body: params.body,
+            timestamp,
+        });
         let res = MsgSendResult {
             delivered_to: resolved,
-            message: MsgInfo {
-                seq: first_seq,
-                from_pane_id: sender_pane_id,
-                from_workspace_id: sender_workspace,
-                from_label,
-                to: params.target,
-                body: params.body,
-                timestamp,
-            },
+            message,
         };
         encode_success(id, ResponseResult::MsgSend {
             delivered_to: res.delivered_to,
@@ -368,6 +400,7 @@ mod tests {
             panic!("Expected MsgSend response");
         };
         assert_eq!(delivered_to, vec![p2_id.clone()]);
+        let message = message.expect("non-empty fanout carries a message");
         assert_eq!(message.from_pane_id, Some(p1_id.clone()));
         assert_eq!(message.from_label, "orchestrator");
         assert_eq!(message.body, "hello worker");
@@ -704,7 +737,92 @@ mod tests {
         assert!(delivered_to.contains(&p2_id));
         assert!(!delivered_to.contains(&p1_id));
         // Stored sender id is the canonical public id, not the alias form.
+        let message = message.expect("non-empty fanout carries a message");
         assert_eq!(message.from_pane_id, Some(p1_id));
+    }
+
+    #[test]
+    fn test_unresolvable_sender_pane_id_is_rejected() {
+        let mut app = app_with_workspace();
+        let root = app.state.workspaces[0].tabs[0].root_pane;
+        app.state.ensure_test_terminals();
+        let p1_id = app.public_pane_id(0, root).unwrap();
+
+        // A PROVIDED sender id that does not resolve to a live pane must be
+        // rejected, never passed through verbatim (or as a blank identity).
+        for bogus in ["", "   ", "w9:p9", "not-a-pane"] {
+            let res = app.handle_msg_send(
+                "req".into(),
+                MsgSendParams {
+                    target: "@all".into(),
+                    body: "hi".into(),
+                    sender_pane_id: Some(bogus.into()),
+                },
+            );
+            assert!(
+                res.contains("pane_not_found"),
+                "sender {bogus:?} should be rejected, got: {res}"
+            );
+        }
+        // Nothing was delivered by the rejected sends.
+        assert_eq!(app.state.msg_bus.unread(&p1_id), 0);
+
+        // Absent sender id still means external identity and delivers.
+        let res = app.handle_msg_send(
+            "req_ok".into(),
+            MsgSendParams {
+                target: "@all".into(),
+                body: "hi".into(),
+                sender_pane_id: None,
+            },
+        );
+        let success: SuccessResponse = serde_json::from_str(&res).unwrap();
+        let ResponseResult::MsgSend { delivered_to, message } = success.result else {
+            panic!("Expected MsgSend response");
+        };
+        assert_eq!(delivered_to, vec![p1_id]);
+        let message = message.expect("non-empty fanout carries a message");
+        assert_eq!(message.from_pane_id, None);
+        assert_eq!(message.from_label, "external");
+    }
+
+    #[test]
+    fn test_empty_fanout_checks_size_and_omits_message() {
+        let mut app = app_with_workspace();
+        let root = app.state.workspaces[0].tabs[0].root_pane;
+        app.state.ensure_test_terminals();
+        let p1_id = app.public_pane_id(0, root).unwrap();
+
+        // Oversized body must fail even when @all excludes the only pane
+        // (empty fan-out must not bypass the 64 KiB cap).
+        let res = app.handle_msg_send(
+            "req_1".into(),
+            MsgSendParams {
+                target: "@all".into(),
+                body: "a".repeat(65 * 1024),
+                sender_pane_id: Some(p1_id.clone()),
+            },
+        );
+        assert!(res.contains("message_too_large"));
+
+        // In-cap body with zero recipients: empty delivered_to, null message
+        // (no bogus seq:0 message object).
+        let res = app.handle_msg_send(
+            "req_2".into(),
+            MsgSendParams {
+                target: "@all".into(),
+                body: "hello".into(),
+                sender_pane_id: Some(p1_id.clone()),
+            },
+        );
+        let success: SuccessResponse = serde_json::from_str(&res).unwrap();
+        let ResponseResult::MsgSend { delivered_to, message } = success.result else {
+            panic!("Expected MsgSend response");
+        };
+        assert!(delivered_to.is_empty());
+        assert!(message.is_none());
+        assert!(!res.contains("\"seq\":0"));
+        assert_eq!(app.state.msg_bus.unread(&p1_id), 0);
     }
 
     #[test]

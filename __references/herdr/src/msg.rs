@@ -9,8 +9,9 @@ use std::collections::{HashMap, HashSet, VecDeque};
 const MAX_INBOX_MESSAGES: usize = 500;
 /// Max total body bytes retained per inbox (oldest dropped first).
 const MAX_INBOX_BODY_BYTES: usize = 4 * 1024 * 1024;
-/// Max body size for a single message.
-const MAX_MESSAGE_BODY_BYTES: usize = 64 * 1024;
+/// Max body size for a single message. Public so the API layer can reject
+/// oversized bodies up front (before resolution), independent of fan-out.
+pub const MAX_MESSAGE_BODY_BYTES: usize = 64 * 1024;
 
 /// One delivered message stored in a pane inbox.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -131,9 +132,15 @@ impl MsgBus {
     /// Forms:
     /// - `@all` → [`MsgTarget::All`]
     /// - `@name` → [`MsgTarget::Group`]
-    /// - contains `:` → [`MsgTarget::PaneId`] (e.g. `w1:p3`)
+    /// - canonical public pane id `w<ENC>:p<ENC>` → [`MsgTarget::PaneId`]
+    ///   (e.g. `w1:p3`; `<ENC>` is the public-id alphabet — see
+    ///   [`crate::workspace::decode_public_number`])
     /// - `workspace_id/label` → [`MsgTarget::Qualified`]
     /// - else bare [`MsgTarget::Label`]
+    ///
+    /// A `:` alone does NOT make a pane id: labels like `worker:api` are
+    /// legal and route as labels. Only the exact public-pane-id grammar is
+    /// classified as [`MsgTarget::PaneId`].
     ///
     /// Labels that are empty, contain `/`, or begin with `@` are unaddressable.
     pub fn parse_target(expr: &str) -> Result<MsgTarget, ResolveError> {
@@ -151,7 +158,7 @@ impl MsgBus {
             return Ok(MsgTarget::Group(rest.to_string()));
         }
 
-        if expr.contains(':') {
+        if is_public_pane_id(expr) {
             return Ok(MsgTarget::PaneId(expr.to_string()));
         }
 
@@ -391,6 +398,31 @@ impl MsgBus {
         members
     }
 
+    /// Re-key all bus state from `old` to `new` when a pane's canonical
+    /// public id changes (cross-workspace move). Moves the inbox intact —
+    /// seq counter, ack cursor and dropped count are preserved — and
+    /// rewrites every group-index entry from `old` to `new`. Any stale state
+    /// already under `new` is discarded first (a freshly assigned canonical
+    /// id must never expose another pane's leftovers).
+    pub fn rekey_pane(&mut self, old: &str, new: &str) {
+        if old == new {
+            return;
+        }
+        self.remove_pane(new);
+        if let Some(inbox) = self.inboxes.remove(old) {
+            self.inboxes.insert(new.to_string(), inbox);
+        }
+        if let Some(groups) = self.pane_groups.remove(old) {
+            for group in &groups {
+                if let Some(members) = self.group_members.get_mut(group) {
+                    members.remove(old);
+                    members.insert(new.to_string());
+                }
+            }
+            self.pane_groups.insert(new.to_string(), groups);
+        }
+    }
+
     /// Tear down inbox and group membership for a closed pane.
     pub fn remove_pane(&mut self, pane_id: &str) {
         self.inboxes.remove(pane_id);
@@ -414,6 +446,27 @@ impl Default for MsgBus {
     fn default() -> Self {
         Self::new()
     }
+}
+
+/// True when `expr` matches the canonical public pane id grammar
+/// `w<ENC>:p<ENC>` produced by [`crate::workspace::public_pane_id_for_number`]
+/// (`<ENC>` = public-id alphabet, decoded by
+/// [`crate::workspace::decode_public_number`]). Anything else — including
+/// labels that merely contain a `:` such as `worker:api` — is not a pane id.
+fn is_public_pane_id(expr: &str) -> bool {
+    let Some((workspace, pane)) = expr.split_once(':') else {
+        return false;
+    };
+    let Some(workspace_number) = workspace.strip_prefix('w') else {
+        return false;
+    };
+    let Some(pane_number) = pane.strip_prefix('p') else {
+        return false;
+    };
+    !workspace_number.is_empty()
+        && !pane_number.is_empty()
+        && crate::workspace::decode_public_number(workspace_number).is_some()
+        && crate::workspace::decode_public_number(pane_number).is_some()
 }
 
 fn validate_group_name(group: &str) -> Result<(), MsgError> {
@@ -490,6 +543,46 @@ mod tests {
         assert_eq!(
             MsgBus::parse_target("worker-1"),
             Ok(MsgTarget::Label("worker-1".to_string()))
+        );
+    }
+
+    #[test]
+    fn parse_target_colon_label_routes_as_label_unless_pane_id_grammar() {
+        // Legal labels may contain `:`; only the canonical public-pane-id
+        // grammar (`w<ENC>:p<ENC>`) is classified as a PaneId.
+        assert_eq!(
+            MsgBus::parse_target("worker:api"),
+            Ok(MsgTarget::Label("worker:api".to_string()))
+        );
+        assert_eq!(
+            MsgBus::parse_target("w1:x2"),
+            Ok(MsgTarget::Label("w1:x2".to_string()))
+        );
+        // Lowercase is not in the public-id alphabet.
+        assert_eq!(
+            MsgBus::parse_target("w1:pab"),
+            Ok(MsgTarget::Label("w1:pab".to_string()))
+        );
+        assert_eq!(
+            MsgBus::parse_target("a:b:c"),
+            Ok(MsgTarget::Label("a:b:c".to_string()))
+        );
+        // Real pane ids still classify as PaneId.
+        assert_eq!(
+            MsgBus::parse_target("w1:p3"),
+            Ok(MsgTarget::PaneId("w1:p3".to_string()))
+        );
+        assert_eq!(
+            MsgBus::parse_target("wA:pZ"),
+            Ok(MsgTarget::PaneId("wA:pZ".to_string()))
+        );
+        // Qualified form with a colon-bearing label.
+        assert_eq!(
+            MsgBus::parse_target("w1/worker:api"),
+            Ok(MsgTarget::Qualified {
+                workspace_id: "w1".to_string(),
+                label: "worker:api".to_string(),
+            })
         );
     }
 
@@ -953,6 +1046,53 @@ mod tests {
     fn remove_pane_unknown_is_noop() {
         let mut bus = MsgBus::new();
         bus.remove_pane("missing");
+    }
+
+    // --- rekey_pane ---------------------------------------------------------
+
+    #[test]
+    fn rekey_pane_moves_inbox_and_group_membership() {
+        let mut bus = MsgBus::new();
+        bus.group_join("w1:p2", "devs").unwrap();
+        bus.group_join("w1:p3", "devs").unwrap();
+        bus.deliver("w1:p2", sample_msg("a")).unwrap();
+        bus.deliver("w1:p2", sample_msg("b")).unwrap();
+        bus.deliver("w1:p2", sample_msg("c")).unwrap();
+        bus.ack("w1:p2", 1);
+
+        bus.rekey_pane("w1:p2", "w2:p5");
+
+        // New id owns the inbox with seq/ack counters intact.
+        let (msgs, unread, dropped, ack) = bus.list("w2:p5", None, true);
+        assert_eq!(msgs.len(), 3);
+        assert_eq!(unread, 2);
+        assert_eq!(dropped, 0);
+        assert_eq!(ack, 1);
+        assert_eq!(bus.next_seq("w2:p5"), 4);
+        assert_eq!(bus.groups_of("w2:p5"), vec!["devs".to_string()]);
+        assert_eq!(
+            bus.group_members("devs"),
+            vec!["w1:p3".to_string(), "w2:p5".to_string()]
+        );
+
+        // Old id has nothing left.
+        assert_eq!(bus.next_seq("w1:p2"), 1);
+        assert_eq!(bus.unread("w1:p2"), 0);
+        assert!(bus.groups_of("w1:p2").is_empty());
+        let (old_msgs, _, _, _) = bus.list("w1:p2", None, true);
+        assert!(old_msgs.is_empty());
+    }
+
+    #[test]
+    fn rekey_pane_same_id_or_unknown_old_is_noop() {
+        let mut bus = MsgBus::new();
+        bus.deliver("w1:p2", sample_msg("a")).unwrap();
+        bus.rekey_pane("w1:p2", "w1:p2");
+        assert_eq!(bus.unread("w1:p2"), 1);
+
+        bus.rekey_pane("missing", "w9:p9");
+        assert_eq!(bus.unread("w9:p9"), 0);
+        assert_eq!(bus.next_seq("w9:p9"), 1);
     }
 
     #[test]

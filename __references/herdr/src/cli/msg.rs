@@ -51,6 +51,8 @@ fn print_msg_help() {
     eprintln!("herdr msg commands:");
     eprintln!("  herdr msg send <target> <text>");
     eprintln!("  herdr msg read [--all] [--after SEQ] [--pane ID]");
+    eprintln!("      (with --after, read is peek-like: it never auto-acks,");
+    eprintln!("       because acking past skipped messages would mark them read)");
     eprintln!("  herdr msg peek [--all] [--after SEQ] [--pane ID]");
     eprintln!("  herdr msg ack <up-to-seq> [--pane ID]");
     eprintln!("  herdr msg wait [--timeout MS] [--pane ID]");
@@ -292,12 +294,12 @@ fn msg_read(args: &[String]) -> std::io::Result<i32> {
         }
     }
 
-    if highest_seq > 0 {
+    if let Some(up_to_seq) = read_auto_ack_seq(parsed.after_seq, highest_seq) {
         let ack_res = super::send_request(&Request {
             id: "cli:msg:ack".into(),
             method: Method::MsgAck(crate::api::schema::MsgAckParams {
                 pane_id,
-                up_to_seq: highest_seq,
+                up_to_seq,
             }),
         })?;
         if let Some(error) = ack_res.get("error") {
@@ -307,6 +309,23 @@ fn msg_read(args: &[String]) -> std::io::Result<i32> {
     }
 
     Ok(0)
+}
+
+/// Auto-ack policy for `msg read`: never ack a seq that was not displayed,
+/// and never ack past an undisplayed-unread gap.
+///
+/// Without `--after`, the listing starts at the ack cursor, so everything
+/// from `ack_seq + 1` through the highest displayed seq was shown — acking
+/// the highest displayed seq is contiguous and loses nothing. With
+/// `--after SEQ`, unread messages at or below SEQ are skipped; acking the
+/// highest displayed seq would silently mark those skipped messages read.
+/// `--after` therefore behaves peek-like and never auto-acks (use
+/// `msg ack` explicitly after processing).
+fn read_auto_ack_seq(after_seq: Option<u64>, highest_displayed_seq: u64) -> Option<u64> {
+    if after_seq.is_some() {
+        return None;
+    }
+    (highest_displayed_seq > 0).then_some(highest_displayed_seq)
 }
 
 fn msg_peek(args: &[String]) -> std::io::Result<i32> {
@@ -385,6 +404,13 @@ fn msg_wait(args: &[String]) -> std::io::Result<i32> {
         }
     };
 
+    let deadline = parsed
+        .timeout_ms
+        .map(|ms| std::time::Instant::now() + std::time::Duration::from_millis(ms));
+    // Socket-level read timeout bounds the subscribe handshake where the
+    // platform supports it (Unix domain sockets; Windows named pipes report
+    // Unsupported and it is ignored). Steady-state pacing does NOT rely on
+    // it — see the reader-thread/channel loop below.
     let read_timeout = parsed.timeout_ms.map(std::time::Duration::from_millis);
     let client = crate::api::client::ApiClient::local();
 
@@ -458,38 +484,95 @@ fn msg_wait(args: &[String]) -> std::io::Result<i32> {
         return Ok(0);
     }
 
-    match stream.next_event() {
-        Ok(None) => {
-            eprintln!("subscription closed before event arrived");
-            Ok(1)
+    // Eviction resilience: the subscription is only a WAKE HINT, not the
+    // source of truth. EventHub retains just the last 512 events and the
+    // server relays them on a 100ms poll, so a large `@all`/group broadcast
+    // can evict this pane's MsgReceived event before it is ever written to
+    // the stream — in which case a blocking next_event() would never return
+    // even though the message is already sitting in the inbox. To close that
+    // gap, a reader thread does the blocking next_event() calls and forwards
+    // wakes over a channel; the main loop paces itself with recv_timeout
+    // (Windows named pipes do not support socket read timeouts, so pacing
+    // must live on the channel, not the socket), and EVERY iteration — real
+    // event, or poll tick — does a fresh msg.list against the baseline seq.
+    // `--timeout` still bounds the total wait via `deadline`.
+    enum WaitWake {
+        Event,
+        Closed,
+        Error(ApiClientError),
+    }
+    let poll_interval = wait_poll_timeout(parsed.timeout_ms);
+    let (wake_tx, wake_rx) = std::sync::mpsc::channel();
+    std::thread::spawn(move || loop {
+        let wake = match stream.next_event() {
+            Ok(Some(_event_value)) => WaitWake::Event,
+            Ok(None) => WaitWake::Closed,
+            Err(err) => WaitWake::Error(err),
+        };
+        let terminal = !matches!(wake, WaitWake::Event);
+        if wake_tx.send(wake).is_err() || terminal {
+            return;
         }
-        Ok(Some(_event_value)) => {
-            let final_list_res = super::send_request(&Request {
-                id: "cli:msg:wait:list".into(),
-                method: Method::MsgList(MsgListParams {
-                    pane_id: pane_id.clone(),
-                    after_seq: Some(last_seq),
-                    include_read: Some(true),
-                }),
-            })?;
+    });
 
-            if let Some(error) = final_list_res.get("error") {
-                eprintln!("{}", serde_json::to_string(error).unwrap());
+    loop {
+        match wake_rx.recv_timeout(poll_interval) {
+            // Real event or poll tick: re-list below either way.
+            Ok(WaitWake::Event) | Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {}
+            Ok(WaitWake::Closed) => {
+                eprintln!("subscription closed before event arrived");
                 return Ok(1);
             }
+            // Socket-level read timeout (Unix with --timeout): fall through
+            // to the list + deadline check instead of aborting early.
+            Ok(WaitWake::Error(ApiClientError::Io(err))) if super::api_timeout_error(&err) => {}
+            Ok(WaitWake::Error(err)) => return Err(super::api_client_error_to_io(err)),
+            // Reader thread gone after a terminal wake was consumed: keep
+            // polling the inbox; the deadline (or a failing list request)
+            // ends the wait.
+            Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => {}
+        }
 
-            if let Some(messages) = final_list_res["result"]["messages"].as_array() {
+        let list_res = super::send_request(&Request {
+            id: "cli:msg:wait:list".into(),
+            method: Method::MsgList(MsgListParams {
+                pane_id: pane_id.clone(),
+                after_seq: Some(last_seq),
+                include_read: Some(true),
+            }),
+        })?;
+
+        if let Some(error) = list_res.get("error") {
+            eprintln!("{}", serde_json::to_string(error).unwrap());
+            return Ok(1);
+        }
+
+        if let Some(messages) = list_res["result"]["messages"].as_array() {
+            if !messages.is_empty() {
                 for msg in messages {
                     println!("{}", serde_json::to_string(msg).unwrap());
                 }
+                return Ok(0);
             }
-            Ok(0)
         }
-        Err(ApiClientError::Io(err)) if super::api_timeout_error(&err) => {
+
+        if deadline.is_some_and(|deadline| std::time::Instant::now() >= deadline) {
             eprintln!("timed out waiting for new messages");
-            Ok(1)
+            return Ok(1);
         }
-        Err(err) => Err(super::api_client_error_to_io(err)),
+    }
+}
+
+/// Poll interval for `msg wait`: how long the main loop waits on the wake
+/// channel before re-listing the inbox anyway (see the eviction-resilience
+/// comment in [`msg_wait`]). Bounded by the user timeout so a `--timeout`
+/// shorter than one interval still expires on time.
+const WAIT_POLL_INTERVAL: std::time::Duration = std::time::Duration::from_millis(250);
+
+fn wait_poll_timeout(timeout_ms: Option<u64>) -> std::time::Duration {
+    match timeout_ms {
+        Some(ms) => WAIT_POLL_INTERVAL.min(std::time::Duration::from_millis(ms.max(1))),
+        None => WAIT_POLL_INTERVAL,
     }
 }
 
@@ -712,5 +795,31 @@ mod tests {
     fn test_parse_group_args_errors() {
         assert!(parse_group_args(&args(&[]), "usage").is_err());
         assert!(parse_group_args(&args(&["--pane", "p1"]), "usage").is_err());
+    }
+
+    #[test]
+    fn test_read_auto_ack_policy() {
+        // Full read (no --after): ack the highest displayed seq.
+        assert_eq!(read_auto_ack_seq(None, 10), Some(10));
+        // Nothing displayed: nothing to ack.
+        assert_eq!(read_auto_ack_seq(None, 0), None);
+        // --after skips messages; acking would silently mark skipped
+        // messages read, so read becomes peek-like and never auto-acks.
+        assert_eq!(read_auto_ack_seq(Some(5), 10), None);
+        assert_eq!(read_auto_ack_seq(Some(0), 3), None);
+        assert_eq!(read_auto_ack_seq(Some(5), 0), None);
+    }
+
+    #[test]
+    fn test_wait_poll_timeout_bounded_by_user_timeout() {
+        use std::time::Duration;
+        // No user timeout: poll at the default interval forever.
+        assert_eq!(wait_poll_timeout(None), WAIT_POLL_INTERVAL);
+        // Long user timeout: poll interval still applies (eviction guard).
+        assert_eq!(wait_poll_timeout(Some(60_000)), WAIT_POLL_INTERVAL);
+        // User timeout shorter than one interval: single read bounded by it.
+        assert_eq!(wait_poll_timeout(Some(100)), Duration::from_millis(100));
+        // Zero timeout clamps to a minimal positive read timeout.
+        assert_eq!(wait_poll_timeout(Some(0)), Duration::from_millis(1));
     }
 }

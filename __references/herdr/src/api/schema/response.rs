@@ -241,7 +241,10 @@ pub enum ResponseResult {
     },
     MsgSend {
         delivered_to: Vec<String>,
-        message: super::msg::MsgInfo,
+        // Null for zero-recipient sends (empty fan-out). (Regular comment,
+        // not a doc comment: doc comments become schema descriptions and
+        // would change the generated artifact beyond the type change.)
+        message: Option<super::msg::MsgInfo>,
     },
     MsgList {
         messages: Vec<super::msg::MsgInfo>,
