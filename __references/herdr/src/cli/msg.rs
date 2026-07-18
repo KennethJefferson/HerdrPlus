@@ -59,18 +59,40 @@ fn print_msg_help() {
     eprintln!("  herdr msg who");
 }
 
-fn parse_send_args(args: &[String]) -> Result<(String, String), String> {
-    let Some(target) = args.first() else {
-        return Err("usage: herdr msg send <target> <text>".into());
-    };
-    if args.len() < 2 {
-        return Err("usage: herdr msg send <target> <text>".into());
+fn parse_send_args(args: &[String]) -> Result<(String, String, Option<String>), String> {
+    const USAGE: &str = "usage: herdr msg send <target> <text> [--pane ID]";
+
+    let mut pane_id = None;
+    let mut positionals = Vec::new();
+    let mut index = 0;
+    while index < args.len() {
+        match args[index].as_str() {
+            "--pane" => {
+                let Some(value) = args.get(index + 1) else {
+                    return Err("missing value for --pane".into());
+                };
+                pane_id = Some(super::normalize_pane_id(value));
+                index += 2;
+            }
+            other => {
+                positionals.push(other.to_string());
+                index += 1;
+            }
+        }
     }
-    let text = args[1..].join(" ");
+
+    if positionals.is_empty() {
+        return Err(USAGE.into());
+    }
+    let target = positionals.remove(0);
+    if positionals.is_empty() {
+        return Err(USAGE.into());
+    }
+    let text = positionals.join(" ");
     if text.trim().is_empty() {
-        return Err("usage: herdr msg send <target> <text>".into());
+        return Err(USAGE.into());
     }
-    Ok((target.clone(), text))
+    Ok((target, text, pane_id))
 }
 
 fn parse_read_peek_args(args: &[String]) -> Result<ReadPeekArgs, String> {
@@ -204,7 +226,7 @@ fn msg_send(args: &[String]) -> std::io::Result<i32> {
     let env_pane_id = std::env::var("HERDR_PANE_ID")
         .ok()
         .filter(|value| !value.trim().is_empty());
-    let (target, text) = match parse_send_args(args) {
+    let (target, text, pane_id) = match parse_send_args(args) {
         Ok(res) => res,
         Err(err) => {
             eprintln!("{err}");
@@ -215,7 +237,7 @@ fn msg_send(args: &[String]) -> std::io::Result<i32> {
     let params = crate::api::schema::MsgSendParams {
         target,
         body: text,
-        sender_pane_id: env_pane_id,
+        sender_pane_id: pane_id.or(env_pane_id),
     };
 
     super::print_response(&super::send_request(&Request {
@@ -540,9 +562,11 @@ mod tests {
 
     #[test]
     fn test_parse_send_args_success() {
-        let (target, text) = parse_send_args(&args(&["w1/worker-1", "hello", "world"])).unwrap();
+        let (target, text, pane_id) =
+            parse_send_args(&args(&["w1/worker-1", "hello", "world"])).unwrap();
         assert_eq!(target, "w1/worker-1");
         assert_eq!(text, "hello world");
+        assert_eq!(pane_id, None);
     }
 
     #[test]
@@ -550,6 +574,61 @@ mod tests {
         assert!(parse_send_args(&args(&[])).is_err());
         assert!(parse_send_args(&args(&["w1/worker-1"])).is_err());
         assert!(parse_send_args(&args(&["w1/worker-1", "   "])).is_err());
+    }
+
+    #[test]
+    fn test_parse_send_args_pane_flag_after_positionals() {
+        let (target, text, pane_id) = parse_send_args(&args(&[
+            "worker-1",
+            "build the API first",
+            "--pane",
+            "w1:p13",
+        ]))
+        .unwrap();
+        assert_eq!(target, "worker-1");
+        assert_eq!(text, "build the API first");
+        assert_eq!(pane_id, Some("w1:p13".to_string()));
+        assert!(!text.contains("--pane"));
+    }
+
+    #[test]
+    fn test_parse_send_args_pane_flag_before_positionals() {
+        let (target, text, pane_id) = parse_send_args(&args(&[
+            "--pane",
+            "w1:p13",
+            "worker-2",
+            "text",
+        ]))
+        .unwrap();
+        assert_eq!(target, "worker-2");
+        assert_eq!(text, "text");
+        assert_eq!(pane_id, Some("w1:p13".to_string()));
+        assert!(!text.contains("--pane"));
+    }
+
+    #[test]
+    fn test_parse_send_args_pane_flag_between_positionals() {
+        let (target, text, pane_id) = parse_send_args(&args(&[
+            "worker-1",
+            "--pane",
+            "w1:p13",
+            "build the API first",
+        ]))
+        .unwrap();
+        assert_eq!(target, "worker-1");
+        assert_eq!(text, "build the API first");
+        assert_eq!(pane_id, Some("w1:p13".to_string()));
+        assert!(!text.contains("--pane"));
+    }
+
+    #[test]
+    fn test_parse_send_args_no_flag_is_external() {
+        let (target, text, pane_id) =
+            parse_send_args(&args(&["worker-1", "hello there"])).unwrap();
+        assert_eq!(target, "worker-1");
+        assert_eq!(text, "hello there");
+        assert_eq!(pane_id, None);
+        assert!(!text.contains("--pane"));
     }
 
     #[test]
