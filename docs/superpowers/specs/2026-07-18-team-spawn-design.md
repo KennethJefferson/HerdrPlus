@@ -25,8 +25,9 @@ herdrplus team spawn <team-name>
     [--cwd <dir>]                     # shared by all panes; default: caller's cwd
     [--with-orch [cmd]]               # extra pane labeled "orch"; default cmd = plain shell
     [--wait] [--timeout <secs>]       # poll until all agent panes ready (timeout default: 60)
-    [--json]                          # machine-readable pane map (default when stdout is not a tty)
 ```
+
+(Amended at plan stage: the originally-specced `--json` flag is dropped — herdr's CLI convention for API-backed commands is JSON output always, so the pane map is always machine-readable.)
 
 - `<team-name>` becomes both the workspace label and the msg group name.
 - Label defaults: per-agent counters — `claude-1`, `claude-2`, `grok-1`. Explicit labels via `ws1=claude`.
