@@ -745,6 +745,137 @@ mod tests {
         assert_eq!(error.error.code, "split_not_found");
     }
 
+    #[test]
+    fn layout_balance_updates_ratios_and_emits_event() {
+        let mut app = app_with_workspace();
+        app.state.workspaces[0].test_split(Direction::Horizontal);
+        app.state.workspaces[0].tabs[0]
+            .layout
+            .set_ratio_at(&[], 0.8);
+
+        let response = app.handle_layout_balance(
+            "req".into(),
+            LayoutBalanceParams {
+                tab_id: None,
+                pane_id: None,
+            },
+        );
+
+        assert!(response.contains("layout_balanced"));
+        assert!(response.contains("\"changed\":true"));
+
+        let success: SuccessResponse = serde_json::from_str(&response).unwrap();
+        let ResponseResult::LayoutBalanced { layout, changed } = success.result else {
+            panic!("expected layout balanced response");
+        };
+        assert!(changed);
+        let LayoutNode::Split { ratio, .. } = layout.root else {
+            panic!("expected split layout root");
+        };
+        assert!((ratio - 0.5).abs() < f32::EPSILON);
+        assert!(matches!(
+            &app.event_hub.events_after(0).last().expect("layout event").1.data,
+            EventData::LayoutUpdated { layout }
+                if layout.tab_id == app.public_tab_id(0, 0).unwrap()
+                    && (layout.splits[0].ratio - 0.5).abs() < f32::EPSILON
+        ));
+    }
+
+    #[test]
+    fn layout_balance_noop_suppresses_save_and_event() {
+        let mut app = app_with_workspace();
+        app.state.workspaces[0].test_split(Direction::Horizontal);
+        app.state.workspaces[0].tabs[0]
+            .layout
+            .set_ratio_at(&[], 0.8);
+
+        let first_response = app.handle_layout_balance(
+            "req1".into(),
+            LayoutBalanceParams {
+                tab_id: None,
+                pane_id: None,
+            },
+        );
+        let success: SuccessResponse = serde_json::from_str(&first_response).unwrap();
+        let ResponseResult::LayoutBalanced { changed, .. } = success.result else {
+            panic!("expected layout balanced response");
+        };
+        assert!(changed);
+
+        let events_after_first = app.event_hub.events_after(0).len();
+
+        let second_response = app.handle_layout_balance(
+            "req2".into(),
+            LayoutBalanceParams {
+                tab_id: None,
+                pane_id: None,
+            },
+        );
+
+        let success: SuccessResponse = serde_json::from_str(&second_response).unwrap();
+        let ResponseResult::LayoutBalanced { changed, .. } = success.result else {
+            panic!("expected layout balanced response");
+        };
+        assert!(!changed);
+        assert_eq!(app.event_hub.events_after(0).len(), events_after_first);
+    }
+
+    #[test]
+    fn layout_balance_rejects_both_targets() {
+        let mut app = app_with_workspace();
+        app.state.workspaces[0].test_split(Direction::Horizontal);
+        let tab_id = app.public_tab_id(0, 0).unwrap();
+        let root = app.state.workspaces[0].tabs[0].root_pane;
+        let pane_id = app.public_pane_id(0, root).unwrap();
+
+        let response = app.handle_layout_balance(
+            "req".into(),
+            LayoutBalanceParams {
+                tab_id: Some(tab_id),
+                pane_id: Some(pane_id),
+            },
+        );
+
+        let error: ErrorResponse = serde_json::from_str(&response).unwrap();
+        assert_eq!(error.error.code, "layout_not_found");
+        assert!(app.event_hub.events_after(0).is_empty());
+    }
+
+    #[test]
+    fn layout_balance_balances_zoomed_tab_tree() {
+        let mut app = app_with_workspace();
+        app.state.workspaces[0].test_split(Direction::Horizontal);
+        app.state.workspaces[0].tabs[0]
+            .layout
+            .set_ratio_at(&[], 0.8);
+        app.state.workspaces[0].tabs[0].zoomed = true;
+
+        let response = app.handle_layout_balance(
+            "req".into(),
+            LayoutBalanceParams {
+                tab_id: None,
+                pane_id: None,
+            },
+        );
+
+        let success: SuccessResponse = serde_json::from_str(&response).unwrap();
+        let ResponseResult::LayoutBalanced { layout, changed } = success.result else {
+            panic!("expected layout balanced response");
+        };
+        assert!(changed);
+        assert!(layout.zoomed);
+        let LayoutNode::Split { ratio, .. } = layout.root else {
+            panic!("expected split layout root");
+        };
+        assert!((ratio - 0.5).abs() < f32::EPSILON);
+        let Node::Split { ratio: tree_ratio, .. } =
+            app.state.workspaces[0].tabs[0].layout.root()
+        else {
+            panic!("expected split tree root");
+        };
+        assert!((tree_ratio - 0.5).abs() < f32::EPSILON);
+    }
+
     #[tokio::test]
     async fn layout_apply_replaces_tab_with_requested_tree() {
         let mut app = app_with_workspace();
