@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 This file is append-only: new entries go on top, existing entries are never rewritten.
 
+## [0.2.1] - 2026-07-18
+
+### Changed
+
+- Binary renamed `herdr.exe` → `herdrplus.exe` via a `[[bin]]` target in Cargo.toml (package name stays `herdr` for upstream mergeability). Test references (`CARGO_BIN_EXE_herdr`, 43 sites) and the justfile clippy target updated to match. Cargo test invocations are now `cargo test --bin herdrplus`.
+
 ## [0.2.0] - 2026-07-17
 
 ### Added

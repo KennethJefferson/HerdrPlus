@@ -3,7 +3,7 @@
 ## Run
 
 ```powershell
-K:\Downloads\__Projects.Mine\herdr4Windows\__solutions\target\release\herdr.exe
+K:\Downloads\__Projects.Mine\herdr4Windows\__solutions\target\release\herdrplus.exe
 ```
 
 herdr is a full-screen TUI — run it in Windows Terminal (or any modern terminal), not through a pipe.
@@ -11,9 +11,9 @@ herdr is a full-screen TUI — run it in Windows Terminal (or any modern termina
 Common commands:
 
 ```powershell
-herdr.exe --version    # print version
-herdr.exe --help       # CLI options
-herdr.exe pane balance      # equalize pane areas (ideal, pre-rounding) in the current tab (TUI: prefix+=)
+herdrplus.exe --version    # print version
+herdrplus.exe --help       # CLI options
+herdrplus.exe pane balance      # equalize pane areas (ideal, pre-rounding) in the current tab (TUI: prefix+=)
 ```
 
 ## What it does
@@ -33,4 +33,4 @@ cd __references/herdr
 cargo build --release
 ```
 
-Output lands in `__solutions/target/release/herdr.exe`. See `CLAUDE.md` for build constraints (Zig 0.15.2, same-drive cache).
+Output lands in `__solutions/target/release/herdrplus.exe`. See `CLAUDE.md` for build constraints (Zig 0.15.2, same-drive cache).
