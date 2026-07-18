@@ -1,9 +1,9 @@
 use crate::api::schema::{
-    EmptyParams, Method, PaneFocusDirectionParams, PaneMoveParams, PaneRenameParams,
-    PaneResizeParams, PaneSplitParams, PaneSwapParams, PaneTarget, PaneZoomParams, Request,
-    TabCreateParams, TabListParams, TabRenameParams, TabTarget, WorkspaceCreateParams,
-    WorkspaceRenameParams, WorkspaceTarget, WorktreeCreateParams, WorktreeListParams,
-    WorktreeOpenParams, WorktreeRemoveParams,
+    EmptyParams, LayoutBalanceParams, Method, PaneFocusDirectionParams, PaneMoveParams,
+    PaneRenameParams, PaneResizeParams, PaneSplitParams, PaneSwapParams, PaneTarget,
+    PaneZoomParams, Request, TabCreateParams, TabListParams, TabRenameParams, TabTarget,
+    WorkspaceCreateParams, WorkspaceRenameParams, WorkspaceTarget, WorktreeCreateParams,
+    WorktreeListParams, WorktreeOpenParams, WorktreeRemoveParams,
 };
 
 fn print_method_response(id: &'static str, method: Method) -> std::io::Result<i32> {
@@ -95,6 +95,10 @@ pub(super) fn pane_focus(params: PaneFocusDirectionParams) -> std::io::Result<i3
 
 pub(super) fn pane_resize(params: PaneResizeParams) -> std::io::Result<i32> {
     print_method_response("cli:pane:resize", Method::PaneResize(params))
+}
+
+pub(super) fn pane_balance(params: LayoutBalanceParams) -> std::io::Result<i32> {
+    print_method_response("cli:pane:balance", Method::LayoutBalance(params))
 }
 
 pub(super) fn pane_zoom(params: PaneZoomParams) -> std::io::Result<i32> {

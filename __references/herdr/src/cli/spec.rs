@@ -392,6 +392,12 @@ fn pane_command() -> Command {
                 .arg(flag("off")),
         )
         .subcommand(
+            Command::new("balance")
+                .about("Balance all panes in a tab to equal areas")
+                .arg(option("tab", "TAB_ID"))
+                .args(current_pane_args()),
+        )
+        .subcommand(
             Command::new("read")
                 .about("Read pane terminal output")
                 .arg(required("pane_id", "PANE_ID"))
