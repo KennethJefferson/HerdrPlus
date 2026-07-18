@@ -393,7 +393,7 @@ fn pane_command() -> Command {
         )
         .subcommand(
             Command::new("balance")
-                .about("Balance all panes in a tab to equal areas")
+                .about("Balance all panes in a tab to equal ideal areas")
                 .arg(option("tab", "TAB_ID"))
                 .args(current_pane_args()),
         )

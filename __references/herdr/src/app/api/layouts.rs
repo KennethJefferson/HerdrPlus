@@ -784,6 +784,12 @@ mod tests {
     #[test]
     fn layout_balance_noop_suppresses_save_and_event() {
         let mut app = app_with_workspace();
+        // app_with_workspace() builds App::new(.., no_session: true, ..), which makes
+        // schedule_session_save() an unconditional no-op (see App::schedule_session_save).
+        // Flip no_session off here (matching the precedent in app/mod.rs's
+        // session_dirty_flag_schedules_debounced_save test) so session_save_deadline is
+        // actually observable, and we can assert the noop path never schedules a save.
+        app.no_session = false;
         app.state.workspaces[0].test_split(Direction::Horizontal);
         app.state.workspaces[0].tabs[0]
             .layout
@@ -801,8 +807,10 @@ mod tests {
             panic!("expected layout balanced response");
         };
         assert!(changed);
+        assert!(app.session_save_deadline.is_some());
 
         let events_after_first = app.event_hub.events_after(0).len();
+        app.session_save_deadline = None;
 
         let second_response = app.handle_layout_balance(
             "req2".into(),
@@ -818,6 +826,7 @@ mod tests {
         };
         assert!(!changed);
         assert_eq!(app.event_hub.events_after(0).len(), events_after_first);
+        assert!(app.session_save_deadline.is_none());
     }
 
     #[test]
@@ -833,6 +842,24 @@ mod tests {
             LayoutBalanceParams {
                 tab_id: Some(tab_id),
                 pane_id: Some(pane_id),
+            },
+        );
+
+        let error: ErrorResponse = serde_json::from_str(&response).unwrap();
+        assert_eq!(error.error.code, "layout_not_found");
+        assert!(app.event_hub.events_after(0).is_empty());
+    }
+
+    #[test]
+    fn layout_balance_rejects_invalid_explicit_id() {
+        let mut app = app_with_workspace();
+        app.state.workspaces[0].test_split(Direction::Horizontal);
+
+        let response = app.handle_layout_balance(
+            "req".into(),
+            LayoutBalanceParams {
+                tab_id: Some("bogus".into()),
+                pane_id: None,
             },
         );
 

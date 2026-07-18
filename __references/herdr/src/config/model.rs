@@ -407,7 +407,7 @@ pub struct KeysConfig {
     pub split_vertical: BindingConfig,
     /// Split pane horizontally (stacked). Default: "prefix+minus"
     pub split_horizontal: BindingConfig,
-    /// Balance all panes in the current tab to equal areas. Default: "prefix+="
+    /// Balance all panes in the current tab to equal ideal areas. Default: "prefix+="
     pub balance_panes: BindingConfig,
     /// Close the focused pane. Default: "prefix+x"
     pub close_pane: BindingConfig,

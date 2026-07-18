@@ -2454,6 +2454,19 @@ navigate_pane_right = "ctrl+l"
     }
 
     #[test]
+    fn default_balance_panes_binding_resolves_to_balance_panes_action() {
+        let state = state_with_workspaces(&["test"]);
+
+        let action = action_for_key(
+            &state,
+            TerminalKey::new(KeyCode::Char('='), KeyModifiers::empty()),
+            BindingDispatch::Prefix,
+        );
+
+        assert_eq!(action, Some(NavigateAction::BalancePanes));
+    }
+
+    #[test]
     fn prefix_tab_override_can_map_to_last_pane() {
         let config: Config = toml::from_str(
             r#"

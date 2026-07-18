@@ -13,7 +13,7 @@ Common commands:
 ```powershell
 herdr.exe --version    # print version
 herdr.exe --help       # CLI options
-herdr.exe pane balance      # equalize pane areas in the current tab (TUI: prefix+=)
+herdr.exe pane balance      # equalize pane areas (ideal, pre-rounding) in the current tab (TUI: prefix+=)
 ```
 
 ## What it does

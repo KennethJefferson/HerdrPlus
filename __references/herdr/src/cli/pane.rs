@@ -371,6 +371,8 @@ fn parse_pane_balance_args(
 ) -> Result<LayoutBalanceParams, String> {
     let mut tab_id: Option<String> = None;
     let mut pane_id: Option<String> = None;
+    let mut pane_flag_seen = false;
+    let mut current_flag_seen = false;
 
     let mut index = 0;
     while index < args.len() {
@@ -387,6 +389,7 @@ fn parse_pane_balance_args(
                     return Err("missing value for --pane".into());
                 };
                 pane_id = Some(super::normalize_pane_id(value));
+                pane_flag_seen = true;
                 index += 2;
             }
             "--current" => {
@@ -396,12 +399,16 @@ fn parse_pane_balance_args(
                     );
                 };
                 pane_id = Some(super::normalize_pane_id(env_id));
+                current_flag_seen = true;
                 index += 1;
             }
             other => return Err(format!("unknown option: {other}")),
         }
     }
 
+    if pane_flag_seen && current_flag_seen {
+        return Err("provide only one of --tab or --pane/--current".into());
+    }
     if tab_id.is_some() && pane_id.is_some() {
         return Err("provide only one of --tab or --pane/--current".into());
     }
@@ -1775,5 +1782,31 @@ mod tests {
         assert!(
             parse_pane_balance_args(&args(&["--tab", "w1:t1", "--pane", "w1:p1"]), None).is_err()
         );
+    }
+
+    #[test]
+    fn balance_args_accept_pane_only() {
+        let params =
+            parse_pane_balance_args(&args(&["--pane", "w1:p1"]), None).unwrap();
+        assert_eq!(params.pane_id.as_deref(), Some("w1:p1"));
+        assert_eq!(params.tab_id, None);
+    }
+
+    #[test]
+    fn balance_args_reject_pane_then_current() {
+        assert!(parse_pane_balance_args(
+            &args(&["--pane", "w1:p1", "--current"]),
+            Some("w1:p3")
+        )
+        .is_err());
+    }
+
+    #[test]
+    fn balance_args_reject_current_then_pane() {
+        assert!(parse_pane_balance_args(
+            &args(&["--current", "--pane", "w1:p1"]),
+            Some("w1:p3")
+        )
+        .is_err());
     }
 }
