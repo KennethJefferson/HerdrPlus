@@ -370,6 +370,16 @@ impl App {
                 self.split_focused_pane_via_api(crate::api::schema::SplitDirection::Down);
                 leave_navigate_mode(&mut self.state);
             }
+            NavigateAction::BalancePanes => {
+                self.runtime_layout_balance(
+                    "tui.layout.balance",
+                    crate::api::schema::LayoutBalanceParams {
+                        tab_id: None,
+                        pane_id: None,
+                    },
+                );
+                leave_navigate_mode(&mut self.state);
+            }
             NavigateAction::ClosePane => {
                 if !self.close_focused_pane_via_api_requires_confirmation() {
                     leave_navigate_mode(&mut self.state);
@@ -1324,6 +1334,7 @@ pub(crate) enum NavigateAction {
     SwapPaneRight,
     SplitVertical,
     SplitHorizontal,
+    BalancePanes,
     ClosePane,
     EditScrollback,
     CopyMode,
@@ -1462,6 +1473,7 @@ fn non_indexed_action_for_key(
         (&kb.cycle_pane_previous, NavigateAction::CyclePanePrevious),
         (&kb.split_vertical, NavigateAction::SplitVertical),
         (&kb.split_horizontal, NavigateAction::SplitHorizontal),
+        (&kb.balance_panes, NavigateAction::BalancePanes),
         (&kb.close_pane, NavigateAction::ClosePane),
         (&kb.zoom, NavigateAction::Zoom),
         (&kb.resize_mode, NavigateAction::EnterResizeMode),
@@ -1682,6 +1694,17 @@ pub(super) fn execute_navigate_action_in_context(
         }
         NavigateAction::SplitHorizontal => {
             state.split_pane(terminal_runtimes, Direction::Vertical);
+            leave_navigate_mode(state);
+        }
+        NavigateAction::BalancePanes => {
+            if let Some(ws_idx) = state.active {
+                if let Some(ws) = state.workspaces.get_mut(ws_idx) {
+                    let tab_idx = ws.active_tab_index();
+                    if let Some(tab) = ws.tabs.get_mut(tab_idx) {
+                        tab.layout.balance();
+                    }
+                }
+            }
             leave_navigate_mode(state);
         }
         NavigateAction::ClosePane => {

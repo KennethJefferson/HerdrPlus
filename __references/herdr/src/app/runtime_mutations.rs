@@ -149,7 +149,6 @@ impl App {
         self.dispatch_runtime_mutation(id, Method::LayoutSetSplitRatio(params))
     }
 
-    #[allow(dead_code)] // wired to a TUI action in a later task
     pub(crate) fn runtime_layout_balance(
         &mut self,
         id: &'static str,
