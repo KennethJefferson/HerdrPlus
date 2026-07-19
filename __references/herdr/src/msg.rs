@@ -453,7 +453,7 @@ impl Default for MsgBus {
 /// (`<ENC>` = public-id alphabet, decoded by
 /// [`crate::workspace::decode_public_number`]). Anything else — including
 /// labels that merely contain a `:` such as `worker:api` — is not a pane id.
-fn is_public_pane_id(expr: &str) -> bool {
+pub(crate) fn is_public_pane_id(expr: &str) -> bool {
     let Some((workspace, pane)) = expr.split_once(':') else {
         return false;
     };

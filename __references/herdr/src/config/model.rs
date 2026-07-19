@@ -257,6 +257,12 @@ impl Default for SessionConfig {
     }
 }
 
+#[derive(Debug, Default, Clone, Deserialize)]
+#[serde(default)]
+pub struct TeamConfig {
+    pub agents: std::collections::BTreeMap<String, String>,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize, schemars::JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum ConfigReloadStatus {
@@ -291,6 +297,7 @@ pub struct Config {
     pub theme: ThemeConfig,
     pub terminal: TerminalConfig,
     pub session: SessionConfig,
+    pub team: TeamConfig,
     pub update: UpdateConfig,
     pub keys: KeysConfig,
     pub ui: UiConfig,
@@ -1728,5 +1735,24 @@ scrollback_lines = 12345
 "#;
         let config: Config = toml::from_str(toml).unwrap();
         assert_eq!(config.advanced.scrollback_limit_bytes, 12345);
+    }
+
+    #[test]
+    fn team_agents_section_parses() {
+        let config: Config = toml::from_str(
+            "[team.agents]\nclaude = \"claude --dangerously-skip-permissions\"\npi = \"pi\"\n",
+        )
+        .expect("config with [team.agents] parses");
+        assert_eq!(
+            config.team.agents.get("claude").map(String::as_str),
+            Some("claude --dangerously-skip-permissions")
+        );
+        assert_eq!(config.team.agents.get("pi").map(String::as_str), Some("pi"));
+    }
+
+    #[test]
+    fn team_section_defaults_empty() {
+        let config: Config = toml::from_str("").expect("empty config parses");
+        assert!(config.team.agents.is_empty());
     }
 }

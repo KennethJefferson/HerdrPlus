@@ -429,6 +429,7 @@ fn api_method_name(method: &Method) -> &'static str {
         Method::MsgAck(_) => "msg.ack",
         Method::MsgGroupJoin(_) => "msg.group_join",
         Method::MsgGroupLeave(_) => "msg.group_leave",
+        Method::TeamSpawn(_) => "team.spawn",
         Method::MsgWho(_) => "msg.who",
     }
 }

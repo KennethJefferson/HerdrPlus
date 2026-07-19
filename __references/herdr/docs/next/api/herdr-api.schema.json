@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "protocol": 18,
+  "protocol": 19,
   "schema_version": 1,
   "schemas": {
     "error_response": {
@@ -3853,6 +3853,61 @@
           ],
           "type": "object"
         },
+        "TeamSpawnEntry": {
+          "properties": {
+            "agent": {
+              "type": "string"
+            },
+            "label": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "agent"
+          ],
+          "type": "object"
+        },
+        "TeamSpawnParams": {
+          "properties": {
+            "cwd": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "entries": {
+              "items": {
+                "$ref": "#/schemas/request/$defs/TeamSpawnEntry"
+              },
+              "type": "array"
+            },
+            "focus": {
+              "default": false,
+              "type": "boolean"
+            },
+            "name": {
+              "type": "string"
+            },
+            "orch_command": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "with_orch": {
+              "default": false,
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "name",
+            "entries"
+          ],
+          "type": "object"
+        },
         "ToastHerdrPosition": {
           "enum": [
             "top-left",
@@ -5588,6 +5643,22 @@
             },
             "params": {
               "$ref": "#/schemas/request/$defs/EmptyParams"
+            }
+          },
+          "required": [
+            "method",
+            "params"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "method": {
+              "const": "team.spawn",
+              "type": "string"
+            },
+            "params": {
+              "$ref": "#/schemas/request/$defs/TeamSpawnParams"
             }
           },
           "required": [
@@ -9569,6 +9640,33 @@
             },
             {
               "properties": {
+                "group": {
+                  "type": "string"
+                },
+                "panes": {
+                  "items": {
+                    "$ref": "#/schemas/success_response/$defs/TeamPaneInfo"
+                  },
+                  "type": "array"
+                },
+                "type": {
+                  "const": "team_spawned",
+                  "type": "string"
+                },
+                "workspace": {
+                  "$ref": "#/schemas/success_response/$defs/WorkspaceInfo"
+                }
+              },
+              "required": [
+                "type",
+                "workspace",
+                "group",
+                "panes"
+              ],
+              "type": "object"
+            },
+            {
+              "properties": {
                 "type": {
                   "const": "ok",
                   "type": "string"
@@ -9709,6 +9807,29 @@
             "focused",
             "pane_count",
             "agent_status"
+          ],
+          "type": "object"
+        },
+        "TeamPaneInfo": {
+          "properties": {
+            "agent": {
+              "type": "string"
+            },
+            "command": {
+              "type": "string"
+            },
+            "label": {
+              "type": "string"
+            },
+            "pane_id": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "label",
+            "pane_id",
+            "agent",
+            "command"
           ],
           "type": "object"
         },

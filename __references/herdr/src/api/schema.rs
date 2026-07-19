@@ -11,6 +11,7 @@ pub mod server;
 pub mod session;
 pub mod tabs;
 pub mod workspaces;
+pub mod team;
 pub mod worktrees;
 pub mod msg;
 
@@ -25,6 +26,7 @@ pub use server::*;
 pub use session::*;
 pub use tabs::*;
 pub use workspaces::*;
+pub use team::*;
 pub use worktrees::*;
 pub use msg::*;
 
@@ -241,6 +243,8 @@ pub enum Method {
     MsgGroupLeave(MsgGroupLeaveParams),
     #[serde(rename = "msg.who")]
     MsgWho(EmptyParams),
+    #[serde(rename = "team.spawn")]
+    TeamSpawn(TeamSpawnParams),
 }
 
 #[cfg(test)]

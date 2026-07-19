@@ -71,6 +71,7 @@ pub(crate) fn request_changes_ui(request: &Request) -> bool {
             | Method::PluginPaneFocus(_)
             | Method::PluginPaneClose(_)
             | Method::MsgSend(_)
+            | Method::TeamSpawn(_)
             | Method::MsgAck(_)
     )
 }

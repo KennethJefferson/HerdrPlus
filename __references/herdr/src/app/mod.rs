@@ -670,6 +670,7 @@ impl App {
             host_cell_size: crate::kitty_graphics::HostCellSize::default(),
             session_dirty: false,
             terminal_runtime_shutdowns: Vec::new(),
+            team_agents: config.team.agents.clone(),
         };
 
         state.terminals = restored_terminals;
@@ -1495,6 +1496,10 @@ impl App {
         if !invalid_section("worktrees") {
             self.state.worktree_directory =
                 crate::worktree::expand_tilde_absolute_path(&config.worktrees.directory);
+        }
+
+        if !invalid_section("team") {
+            self.state.team_agents = config.team.agents.clone();
         }
 
         if !invalid_section("theme") {
