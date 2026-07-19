@@ -157,27 +157,25 @@ fn wait_for_team_ready(spawn_response: &serde_json::Value, timeout_secs: u64) ->
         .as_array()
         .cloned()
         .unwrap_or_default();
-    // detectable = herdr's detect module knows ~21 agents (claude/codex/gemini/pi/.../omp/grok)
+    // waitable = herdr's detect module knows this agent (~21 agents:
+    // claude/codex/gemini/pi/.../omp/grok). The orch pane is excluded
+    // explicitly, not just because "orch" is absent from the detect registry.
+    let waitable = |p: &serde_json::Value| {
+        p["agent"]
+            .as_str()
+            .map(|a| a != "orch" && crate::detect::identify_agent(a).is_some())
+            .unwrap_or(false)
+    };
     let mut pending: BTreeMap<String, String> = panes
         .iter()
-        .filter(|p| {
-            p["agent"]
-                .as_str()
-                .map(|a| crate::detect::identify_agent(a).is_some())
-                .unwrap_or(false)
-        })
+        .filter(|p| waitable(p))
         .filter_map(|p| {
             Some((p["pane_id"].as_str()?.to_string(), p["label"].as_str()?.to_string()))
         })
         .collect();
     let skipped: Vec<String> = panes
         .iter()
-        .filter(|p| {
-            p["agent"]
-                .as_str()
-                .map(|a| crate::detect::identify_agent(a).is_none())
-                .unwrap_or(true)
-        })
+        .filter(|p| !waitable(p))
         .filter_map(|p| p["label"].as_str().map(str::to_string))
         .collect();
     if !skipped.is_empty() {

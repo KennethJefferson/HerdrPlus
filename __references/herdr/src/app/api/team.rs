@@ -432,6 +432,28 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn spawn_six_pane_roster_builds_grid_labels_and_membership() {
+        let mut app = app();
+        let entries = vec![
+            entry(Some("ws1"), "pwsh"),
+            entry(Some("ws2"), "pwsh"),
+            entry(Some("ws3"), "pwsh"),
+            entry(None, "pwsh"),
+            entry(None, "pwsh"),
+            entry(Some("reviewer"), "pwsh"),
+        ];
+        let res = app.handle_team_spawn("req_1".into(), spawn_params("mid", entries));
+        let (_, group, panes) = parse_spawned(&res);
+        assert_eq!(group, "mid");
+        assert_eq!(panes.len(), 6);
+        let labels: Vec<&str> = panes.iter().map(|p| p.label.as_str()).collect();
+        assert_eq!(labels, vec!["ws1", "ws2", "ws3", "pwsh-1", "pwsh-2", "reviewer"]);
+        assert_eq!(app.state.msg_bus.group_members("mid").len(), 6);
+        assert_eq!(app.state.workspaces.len(), 2, "home + team workspace");
+        assert_eq!(app.state.workspaces[1].tabs[0].panes.len(), 6);
+    }
+
+    #[tokio::test]
     async fn rollback_leaves_no_workspace_or_group_residue() {
         let mut app = app();
         let before = app.state.workspaces.len();
