@@ -20,6 +20,42 @@ fn valid_name(s: &str) -> bool {
         && !s.chars().any(char::is_whitespace)
 }
 
+/// Label base for an unlabeled roster entry: the command's executable name,
+/// handling quoted paths (spaces), a leading PowerShell call operator, and
+/// case-insensitive `.exe`, reduced to the label charset.
+fn auto_label_base(command: &str) -> String {
+    let command = command.trim_start();
+    let command = command
+        .strip_prefix('&')
+        .map(str::trim_start)
+        .unwrap_or(command);
+    let token = match command.strip_prefix('"') {
+        Some(rest) => rest.split('"').next().unwrap_or_default(),
+        None => match command.strip_prefix('\'') {
+            Some(rest) => rest.split('\'').next().unwrap_or_default(),
+            None => command.split_whitespace().next().unwrap_or_default(),
+        },
+    };
+    let base = token.rsplit(['/', '\\']).next().unwrap_or_default();
+    let base = if base.len() >= 4
+        && base.is_char_boundary(base.len() - 4)
+        && base[base.len() - 4..].eq_ignore_ascii_case(".exe")
+    {
+        &base[..base.len() - 4]
+    } else {
+        base
+    };
+    let base: String = base
+        .chars()
+        .filter(|c| c.is_ascii_alphanumeric() || *c == '_' || *c == '-')
+        .collect();
+    if base.is_empty() {
+        "agent".to_string()
+    } else {
+        base
+    }
+}
+
 /// Parse a sibling handler's JSON reply; Ok(result) on success, Err(code: message) on error.
 fn parse_reply(response: &str) -> Result<ResponseResult, String> {
     if let Ok(success) = serde_json::from_str::<SuccessResponse>(response) {
@@ -84,22 +120,7 @@ impl App {
             let label = match &entry.label {
                 Some(label) => label.trim().to_string(),
                 None => {
-                    // Passthrough commands can carry flags/paths; auto-labels
-                    // derive from the executable's base name, reduced to the
-                    // label charset, so "claude --model=x" labels as claude-1.
-                    let base: String = entry
-                        .agent
-                        .split_whitespace()
-                        .next()
-                        .unwrap_or_default()
-                        .rsplit(['/', '\\'])
-                        .next()
-                        .unwrap_or_default()
-                        .trim_end_matches(".exe")
-                        .chars()
-                        .filter(|c| c.is_ascii_alphanumeric() || *c == '_' || *c == '-')
-                        .collect();
-                    let base = if base.is_empty() { "agent".to_string() } else { base };
+                    let base = auto_label_base(&entry.agent);
                     let n = counters.entry(base.clone()).or_insert(0);
                     *n += 1;
                     format!("{}-{}", base, n)
@@ -467,6 +488,34 @@ mod tests {
         assert_eq!(app.state.msg_bus.group_members("mid").len(), 6);
         assert_eq!(app.state.workspaces.len(), 2, "home + team workspace");
         assert_eq!(app.state.workspaces[1].tabs[0].panes.len(), 6);
+    }
+
+    #[test]
+    fn auto_label_base_handles_windows_command_shapes() {
+        assert_eq!(auto_label_base("claude --model=x"), "claude");
+        assert_eq!(auto_label_base("C:/tools/mytool.exe --flag value"), "mytool");
+        assert_eq!(auto_label_base(r#""C:\tools\mytool.exe" --flag"#), "mytool");
+        assert_eq!(auto_label_base(r#""C:\Program Files\my tool.exe" --flag"#), "mytool");
+        assert_eq!(auto_label_base(r#"& "C:\Program Files\mytool.exe" --flag"#), "mytool");
+        assert_eq!(auto_label_base("MYTOOL.EXE --x"), "MYTOOL");
+        assert_eq!(auto_label_base("'C:\\tools\\other.exe' --y"), "other");
+        assert_eq!(auto_label_base("\"\""), "agent");
+        assert_eq!(auto_label_base(""), "agent");
+    }
+
+    #[tokio::test]
+    async fn same_executable_different_flags_get_sequential_labels() {
+        let mut app = app();
+        let res = app.handle_team_spawn(
+            "req_1".into(),
+            spawn_params(
+                "seq",
+                vec![entry(None, "claude --model=x"), entry(None, "claude --model=y")],
+            ),
+        );
+        let (_, _, panes) = parse_spawned(&res);
+        assert_eq!(panes[0].label, "claude-1");
+        assert_eq!(panes[1].label, "claude-2");
     }
 
     #[tokio::test]
