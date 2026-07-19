@@ -1,0 +1,4 @@
+# Vendored upstream herdr tree is developed on LF systems; tests include_str!
+# assets and compare artifacts byte-for-byte, so CRLF smudging (core.autocrlf)
+# breaks the suite on Windows. Force LF on checkout for the whole vendored tree.
+__references/herdr/** text=auto eol=lf
