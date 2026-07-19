@@ -14,6 +14,7 @@ mod tabs;
 mod workspaces;
 mod worktrees;
 mod msg;
+mod team;
 
 use super::{api_helpers::pane_agent_status, App, Mode, OverlayPaneState, ToastKind};
 use crate::events::AppEvent;
@@ -1125,6 +1126,7 @@ impl App {
             Method::MsgGroupJoin(params) => return self.handle_msg_group_join(request.id, params),
             Method::MsgGroupLeave(params) => return self.handle_msg_group_leave(request.id, params),
             Method::MsgWho(_) => return self.handle_msg_who(request.id),
+            Method::TeamSpawn(params) => return self.handle_team_spawn(request.id, params),
             _ => {
                 return responses::encode_error(
                     request.id,
