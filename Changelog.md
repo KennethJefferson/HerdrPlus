@@ -12,6 +12,11 @@ This file is append-only: new entries go on top, existing entries are never rewr
 ### Fixed
 
 - Windows pane-kill was a silent no-op: `signal_processes` opened target processes with only `PROCESS_QUERY_LIMITED_INFORMATION`, so every `TerminateProcess` call failed with access denied. Pane teardown only worked when ConPTY closure happened to take the shell down; when that raced shell startup, the shell leaked and `child.wait()` blocked forever — the root cause of the long-standing flaky suite hangs (a pane-spawning test's tokio runtime drop then joined the blocking pool indefinitely). Fixed by opening with `PROCESS_TERMINATE`; regression-tested by killing a real process (`windows_signal_processes_kill_terminates_target`), and the previously ~50%-hanging `deferred_api_worktree_create_completes_after_source_workspace_changes` now passes 10/10.
+- Working-tree CRLF smudge broke byte-exact test assertions: `core.autocrlf=true` re-materialized 382 vendored files with CRLF, so `include_str!` assets and the generated API schema artifact no longer matched their LF sources (the schema currency test and part of the full-suite failures). Working tree normalized back to LF; root `.gitattributes` now forces `eol=lf` for `__references/herdr/**` so checkouts cannot re-smudge.
+
+### Verified
+
+- Full-suite pre-merge gate (`cargo test --bin herdrplus -- --test-threads=1`): with the pane-kill fix the 2561-test monolithic suite now runs to completion in ~60s with zero hangs. Failure-set diff vs base `93ffa86` (same machine, hang fix grafted): base 105 failed / branch 103 failed, **zero new failures on the branch**, 28 net new passing tests, 2 base failures fixed. All remaining failures are pre-existing upstream-on-Windows issues (Unix-only tests such as `/bin/sh` spawns and Unix asset assertions, socket-timing semantics, live agent-manifest cache pollution) — present identically at base.
 
 ## [0.4.0] - 2026-07-18
 
