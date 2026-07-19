@@ -60,11 +60,29 @@ impl App {
                 "team name must be non-empty with no '/', leading '@', or whitespace",
             );
         }
+        if params.name == "all" {
+            return encode_error(
+                id,
+                "invalid_team_name",
+                "team name \"all\" is reserved (@all is the broadcast target)",
+            );
+        }
+
+        const MAX_TEAM_PANES: usize = 24;
+        let total = params.entries.len() + usize::from(params.with_orch);
+        if total > MAX_TEAM_PANES {
+            return encode_error(
+                id,
+                "team_too_large",
+                format!("team of {total} panes exceeds the {MAX_TEAM_PANES}-pane limit"),
+            );
+        }
+
         let mut labels: Vec<String> = Vec::with_capacity(params.entries.len());
         let mut counters: HashMap<String, usize> = HashMap::new();
         for entry in &params.entries {
             let label = match &entry.label {
-                Some(label) => label.clone(),
+                Some(label) => label.trim().to_string(),
                 None => {
                     let n = counters.entry(entry.agent.clone()).or_insert(0);
                     *n += 1;
@@ -76,6 +94,13 @@ impl App {
                     id,
                     "invalid_label",
                     format!("invalid pane label {label:?}"),
+                );
+            }
+            if crate::msg::is_public_pane_id(&label) {
+                return encode_error(
+                    id,
+                    "invalid_label",
+                    format!("label {label:?} matches pane-id syntax and would be unaddressable"),
                 );
             }
             if labels.contains(&label) {
@@ -106,6 +131,9 @@ impl App {
             .collect();
 
         // ---- create workspace (root pane = first team pane) ----
+        let saved_active = self.state.active;
+        let saved_selected = self.state.selected;
+
         let created = self.handle_workspace_create(
             format!("{id}:ws"),
             WorkspaceCreateParams {
@@ -133,6 +161,8 @@ impl App {
                     format!("{id}:rollback"),
                     WorkspaceTarget { workspace_id: workspace_id.clone() },
                 );
+                self.state.active = saved_active;
+                self.state.selected = saved_selected;
                 return encode_error(
                     id,
                     "team_spawn_failed",
@@ -142,7 +172,6 @@ impl App {
         }
 
         // ---- split to a rough row-major grid; balance() equalizes areas after ----
-        let total = params.entries.len() + usize::from(params.with_orch);
         let cols = (total as f64).sqrt().ceil() as usize;
         let mut row_seeds: Vec<String> = vec![root_pane_id.clone()];
         let rows = total.div_ceil(cols);
@@ -414,5 +443,65 @@ mod tests {
         assert!(res.contains("team_spawn_failed"), "got: {res}");
         assert_eq!(app.state.workspaces.len(), before, "workspace rolled back");
         assert!(app.state.msg_bus.group_members("doomed").is_empty(), "group purged");
+    }
+
+    #[test]
+    fn reserved_name_all_refused() {
+        let mut app = app();
+        let before = app.state.workspaces.len();
+        let res = app.handle_team_spawn(
+            "req_1".into(),
+            spawn_params("all", vec![entry(None, "pwsh")]),
+        );
+        assert!(res.contains("invalid_team_name"), "got: {res}");
+        assert_eq!(app.state.workspaces.len(), before);
+    }
+
+    #[test]
+    fn pane_id_shaped_label_refused() {
+        let mut app = app();
+        let before = app.state.workspaces.len();
+        let res = app.handle_team_spawn(
+            "req_1".into(),
+            spawn_params("t", vec![entry(Some("w1:p2"), "pwsh")]),
+        );
+        assert!(res.contains("invalid_label"), "got: {res}");
+        assert_eq!(app.state.workspaces.len(), before);
+    }
+
+    #[test]
+    fn labels_trimmed_before_dup_check() {
+        let mut app = app();
+        let res = app.handle_team_spawn(
+            "req_1".into(),
+            spawn_params("t", vec![entry(Some("a"), "pwsh"), entry(Some("a "), "pwsh")]),
+        );
+        assert!(res.contains("duplicate_label"), "got: {res}");
+    }
+
+    #[test]
+    fn oversized_roster_refused() {
+        let mut app = app();
+        let entries = (0..25).map(|_| entry(None, "pwsh")).collect();
+        let res = app.handle_team_spawn(
+            "req_1".into(),
+            spawn_params("t", entries),
+        );
+        assert!(res.contains("team_too_large"), "got: {res}");
+    }
+
+    #[tokio::test]
+    async fn rollback_restores_focus() {
+        let mut app = app();
+        app.state.active = Some(0);
+        app.state.selected = 0;
+        let res = app.handle_team_spawn_with_fault(
+            "req_1".into(),
+            spawn_params("doomed", vec![entry(None, "pwsh"), entry(None, "pwsh")]),
+            Some(TeamSpawnFault::AfterSplits),
+        );
+        assert!(res.contains("team_spawn_failed"), "got: {res}");
+        assert_eq!(app.state.active, Some(0));
+        assert_eq!(app.state.selected, 0);
     }
 }
