@@ -36,6 +36,7 @@ pub(super) fn command() -> Command {
         .subcommand(notification_command())
         .subcommand(agent_command())
         .subcommand(pane_command())
+        .subcommand(team_command())
         .subcommand(msg_command())
         .subcommand(wait_command())
         .subcommand(terminal_command())
@@ -528,6 +529,21 @@ fn msg_command() -> Command {
                 ),
         )
         .subcommand(Command::new("who").about("Show messaging directory"))
+}
+fn team_command() -> Command {
+    Command::new("team")
+        .about("Spawn and coordinate a team of agent panes")
+        .subcommand(
+            Command::new("spawn")
+                .about("Spawn a team of agent panes")
+                .arg(required("name", "NAME"))
+                .arg(required("agents", "ENTRIES"))
+                .arg(option("cwd", "DIR"))
+                .arg(option("with-orch", "CMD"))
+                .arg(flag("wait"))
+                .arg(option("timeout", "SECS")),
+        )
+        .subcommand(Command::new("help").about("Show team command help"))
 }
 
 fn report_agent_command() -> Command {
