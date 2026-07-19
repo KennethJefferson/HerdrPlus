@@ -1,0 +1,35 @@
+{
+  "expectations": [
+    {
+      "text": "report.md exists and documents start/stop/final process check with real evidence",
+      "passed": true,
+      "evidence": "report.md has baseline, RUNNING (session list ram1 running:true, status via ram1 socket), dry-run inventory, shutdown, and process-free sections with captured JSON"
+    },
+    {
+      "text": "named session ram1 actually started",
+      "passed": true,
+      "evidence": "session list --json shows ram1 running:true, PID 4192, 14MB; status --json via HERDR_SOCKET_PATH shows running, protocol 19"
+    },
+    {
+      "text": "default session never touched",
+      "passed": true,
+      "evidence": "report shows default running:false throughout; only ram1 stopped"
+    },
+    {
+      "text": "postcheck shows zero herdr processes",
+      "passed": true,
+      "evidence": "postcheck.json: herdr_process_count=0"
+    },
+    {
+      "text": "graceful-first shutdown",
+      "passed": true,
+      "evidence": "herdr-cleanup.ps1 -DryRun safety inventory first (live_agents:[]), then graceful cleanup: result clean, force_killed []"
+    }
+  ],
+  "summary": {
+    "failed": 0,
+    "pass_rate": 1.0,
+    "passed": 5,
+    "total": 5
+  }
+}

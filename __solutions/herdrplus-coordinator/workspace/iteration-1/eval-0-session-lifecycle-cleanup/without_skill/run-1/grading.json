@@ -1,0 +1,35 @@
+{
+  "expectations": [
+    {
+      "text": "report.md exists and documents start/stop/final process check with real evidence",
+      "passed": true,
+      "evidence": "report.md has baseline/running/stopped/process-free sections with captured JSON and process checks"
+    },
+    {
+      "text": "named session ram1 actually started",
+      "passed": true,
+      "evidence": "HERDR_SESSION=ram1 + herdrplus server headless; session list shows ram1 running:true, PID 21928"
+    },
+    {
+      "text": "default session never touched",
+      "passed": true,
+      "evidence": "default stayed running:false; never attached or stopped"
+    },
+    {
+      "text": "postcheck shows zero herdr processes",
+      "passed": true,
+      "evidence": "postcheck.json: herdr_process_count=0"
+    },
+    {
+      "text": "graceful-first shutdown",
+      "passed": true,
+      "evidence": "session stop ram1; hit misleading 15s timeout error, correctly re-verified instead of force-killing; documented the pitfall"
+    }
+  ],
+  "summary": {
+    "failed": 0,
+    "pass_rate": 1.0,
+    "passed": 5,
+    "total": 5
+  }
+}

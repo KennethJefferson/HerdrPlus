@@ -1,0 +1,12 @@
+{
+  "eval_id": 2,
+  "eval_name": "window-management",
+  "prompt": "Open the HerdrPlus window on my desktop, maximized. Verify it's actually open, then close just the window and confirm the herdr server is still alive afterwards (that's the point of its client/server design). Finally clean up the server completely too so nothing is left in RAM. Write report.md to the outputs directory documenting each phase with evidence.",
+  "assertions": [
+    "report.md exists and documents all three phases (open maximized, close window with server surviving, full cleanup) with command evidence",
+    "the window was verifiably opened (window handle / window-found evidence, not just a launch command fired blind)",
+    "after closing the window, evidence shows the server still running (status --json running=true or session list running)",
+    "final cleanup evidence shows the server stopped and postcheck.json shows zero herdr/herdrplus processes remaining",
+    "the agent did not block itself by launching the interactive TUI in its own terminal"
+  ]
+}

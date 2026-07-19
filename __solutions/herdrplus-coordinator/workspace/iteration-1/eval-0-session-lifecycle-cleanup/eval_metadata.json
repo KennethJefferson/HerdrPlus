@@ -1,0 +1,12 @@
+{
+  "eval_id": 0,
+  "eval_name": "session-lifecycle-cleanup",
+  "prompt": "herdr keeps hogging RAM on my machine even after I close its window. Start a throwaway herdr session named 'ram1' (do NOT touch my default session), confirm its server is actually running, then shut everything down completely and verify no herdr processes are left running. Write report.md into the outputs directory with the commands you used and evidence for each state (running, stopped, process-free).",
+  "assertions": [
+    "report.md exists in outputs and documents the session start, stop, and final process check with real command output as evidence",
+    "a named session 'ram1' was actually started (evidence of session list --json showing ram1 running, or equivalent)",
+    "the default session was never started or stopped (no evidence of touching the default session's server)",
+    "postcheck.json recorded after the run shows zero herdr/herdrplus processes remaining",
+    "shutdown was graceful-first (session stop / server stop via socket) rather than only force-killing processes"
+  ]
+}

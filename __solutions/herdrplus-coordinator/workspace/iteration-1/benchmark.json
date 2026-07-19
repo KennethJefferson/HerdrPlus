@@ -1,0 +1,330 @@
+{
+  "metadata": {
+    "skill_name": "herdrplus-coordinator",
+    "skill_path": "<path/to/skill>",
+    "executor_model": "<model-name>",
+    "analyzer_model": "<model-name>",
+    "timestamp": "2026-07-19T17:08:42Z",
+    "evals_run": [
+      0,
+      1,
+      2
+    ],
+    "runs_per_configuration": 3
+  },
+  "runs": [
+    {
+      "eval_id": 0,
+      "configuration": "with_skill",
+      "run_number": 1,
+      "result": {
+        "pass_rate": 1.0,
+        "passed": 5,
+        "failed": 0,
+        "total": 5,
+        "time_seconds": 187.7,
+        "tokens": 53378,
+        "tool_calls": 0,
+        "errors": 0
+      },
+      "expectations": [
+        {
+          "text": "report.md exists and documents start/stop/final process check with real evidence",
+          "passed": true,
+          "evidence": "report.md has baseline, RUNNING (session list ram1 running:true, status via ram1 socket), dry-run inventory, shutdown, and process-free sections with captured JSON"
+        },
+        {
+          "text": "named session ram1 actually started",
+          "passed": true,
+          "evidence": "session list --json shows ram1 running:true, PID 4192, 14MB; status --json via HERDR_SOCKET_PATH shows running, protocol 19"
+        },
+        {
+          "text": "default session never touched",
+          "passed": true,
+          "evidence": "report shows default running:false throughout; only ram1 stopped"
+        },
+        {
+          "text": "postcheck shows zero herdr processes",
+          "passed": true,
+          "evidence": "postcheck.json: herdr_process_count=0"
+        },
+        {
+          "text": "graceful-first shutdown",
+          "passed": true,
+          "evidence": "herdr-cleanup.ps1 -DryRun safety inventory first (live_agents:[]), then graceful cleanup: result clean, force_killed []"
+        }
+      ],
+      "notes": []
+    },
+    {
+      "eval_id": 1,
+      "configuration": "with_skill",
+      "run_number": 1,
+      "result": {
+        "pass_rate": 1.0,
+        "passed": 5,
+        "failed": 0,
+        "total": 5,
+        "time_seconds": 213.1,
+        "tokens": 56209,
+        "tool_calls": 0,
+        "errors": 0
+      },
+      "expectations": [
+        {
+          "text": "report lists three distinct real pane IDs from JSON",
+          "passed": true,
+          "evidence": "w1:p1/w1:p2/w1:p3 with terminal IDs term_656f97*"
+        },
+        {
+          "text": "captured ready-build/ready-test/ready-logs from correct panes",
+          "passed": true,
+          "evidence": "per-pane captured output blocks show each ready-* marker at the matching labeled pane"
+        },
+        {
+          "text": "panes labeled build/test/logs and balance invoked",
+          "passed": true,
+          "evidence": "labels in layout tree; pane balance --tab w1:t1 returned layout_balanced changed:true with equal-area ratios"
+        },
+        {
+          "text": "isolated grid1 session, not default",
+          "passed": true,
+          "evidence": "headless herdrplus --session grid1 server; commands aimed via HERDR_SOCKET_PATH; default not running throughout"
+        },
+        {
+          "text": "postcheck shows zero herdr processes",
+          "passed": true,
+          "evidence": "postcheck.json: herdr_process_count=0; session stopped+deleted"
+        }
+      ],
+      "notes": []
+    },
+    {
+      "eval_id": 2,
+      "configuration": "with_skill",
+      "run_number": 1,
+      "result": {
+        "pass_rate": 1.0,
+        "passed": 5,
+        "failed": 0,
+        "total": 5,
+        "time_seconds": 296.0,
+        "tokens": 57011,
+        "tool_calls": 0,
+        "errors": 0
+      },
+      "expectations": [
+        {
+          "text": "all three phases documented with evidence",
+          "passed": true,
+          "evidence": "phases open/verify/close-with-server-survival/cleanup each have JSON+process evidence"
+        },
+        {
+          "text": "window verifiably opened (not fired blind)",
+          "passed": true,
+          "evidence": "wt window found via WindowsTerminal PID 2124, title HerdrPlus[default], visible:true, then IsZoomed:true with full-desktop rect after ShowWindow fixup; script's FindWindowW-by-title false-failed (defect noted and since fixed)"
+        },
+        {
+          "text": "server still running after window close",
+          "passed": true,
+          "evidence": "WM_CLOSE to hwnd 266894; client exited, server PID 24208 stayed alive and answered status --json running:true"
+        },
+        {
+          "text": "full cleanup, zero herdr processes",
+          "passed": true,
+          "evidence": "herdr-cleanup.ps1 dry-run then real: default session stopped, 18.5MB freed, force_killed []; postcheck.json herdr_process_count=0, herdrplus_windows=0"
+        },
+        {
+          "text": "did not block on interactive TUI",
+          "passed": true,
+          "evidence": "TUI ran in separate wt window; agent shell never attached"
+        }
+      ],
+      "notes": []
+    },
+    {
+      "eval_id": 0,
+      "configuration": "without_skill",
+      "run_number": 1,
+      "result": {
+        "pass_rate": 1.0,
+        "passed": 5,
+        "failed": 0,
+        "total": 5,
+        "time_seconds": 358.3,
+        "tokens": 58451,
+        "tool_calls": 0,
+        "errors": 0
+      },
+      "expectations": [
+        {
+          "text": "report.md exists and documents start/stop/final process check with real evidence",
+          "passed": true,
+          "evidence": "report.md has baseline/running/stopped/process-free sections with captured JSON and process checks"
+        },
+        {
+          "text": "named session ram1 actually started",
+          "passed": true,
+          "evidence": "HERDR_SESSION=ram1 + herdrplus server headless; session list shows ram1 running:true, PID 21928"
+        },
+        {
+          "text": "default session never touched",
+          "passed": true,
+          "evidence": "default stayed running:false; never attached or stopped"
+        },
+        {
+          "text": "postcheck shows zero herdr processes",
+          "passed": true,
+          "evidence": "postcheck.json: herdr_process_count=0"
+        },
+        {
+          "text": "graceful-first shutdown",
+          "passed": true,
+          "evidence": "session stop ram1; hit misleading 15s timeout error, correctly re-verified instead of force-killing; documented the pitfall"
+        }
+      ],
+      "notes": []
+    },
+    {
+      "eval_id": 1,
+      "configuration": "without_skill",
+      "run_number": 1,
+      "result": {
+        "pass_rate": 1.0,
+        "passed": 5,
+        "failed": 0,
+        "total": 5,
+        "time_seconds": 190.4,
+        "tokens": 52753,
+        "tool_calls": 0,
+        "errors": 0
+      },
+      "expectations": [
+        {
+          "text": "report lists three distinct real pane IDs from JSON",
+          "passed": true,
+          "evidence": "w1:p1/w1:p2/w1:p3 with terminal IDs term_656f9a*"
+        },
+        {
+          "text": "captured ready-build/ready-test/ready-logs from correct panes",
+          "passed": true,
+          "evidence": "per-pane pane read captures show each ready-* marker; p3 re-read with recent-unwrapped to fix wrapping"
+        },
+        {
+          "text": "panes labeled build/test/logs and balance invoked",
+          "passed": true,
+          "evidence": "pane rename used; balance changed:true, ratio 0.5->0.3333, post-balance rects listed"
+        },
+        {
+          "text": "isolated grid1 session, not default",
+          "passed": true,
+          "evidence": "HERDR_SESSION=grid1 headless server; default verified not running before and after"
+        },
+        {
+          "text": "postcheck shows zero herdr processes",
+          "passed": true,
+          "evidence": "postcheck.json: herdr_process_count=0; grid1 stopped, deleted, dir gone"
+        }
+      ],
+      "notes": []
+    },
+    {
+      "eval_id": 2,
+      "configuration": "without_skill",
+      "run_number": 1,
+      "result": {
+        "pass_rate": 1.0,
+        "passed": 5,
+        "failed": 0,
+        "total": 5,
+        "time_seconds": 385.8,
+        "tokens": 76383,
+        "tool_calls": 0,
+        "errors": 0
+      },
+      "expectations": [
+        {
+          "text": "all three phases documented with evidence",
+          "passed": true,
+          "evidence": "phases 0-3 with Win32, CIM process, socket API evidence plus PrintWindow screenshot"
+        },
+        {
+          "text": "window verifiably opened (not fired blind)",
+          "passed": true,
+          "evidence": "conhost window hwnd 1119016 IsWindowVisible, IsZoomed:true, maximized rect, DWM not cloaked, screenshot of rendered TUI"
+        },
+        {
+          "text": "server still running after window close",
+          "passed": true,
+          "evidence": "WM_CLOSE; client 22100 exited, server 29204 survived and answered status server --json running:true"
+        },
+        {
+          "text": "full cleanup, zero herdr processes",
+          "passed": true,
+          "evidence": "herdrplus server stop exit 0; Win32_Process shows zero herdr processes; postcheck.json herdr_process_count=0"
+        },
+        {
+          "text": "did not block on interactive TUI",
+          "passed": true,
+          "evidence": "TUI launched in separate conhost window via Start-Process"
+        }
+      ],
+      "notes": []
+    }
+  ],
+  "run_summary": {
+    "with_skill": {
+      "pass_rate": {
+        "mean": 1.0,
+        "stddev": 0.0,
+        "min": 1.0,
+        "max": 1.0
+      },
+      "time_seconds": {
+        "mean": 232.2667,
+        "stddev": 56.6369,
+        "min": 187.7,
+        "max": 296.0
+      },
+      "tokens": {
+        "mean": 55532.6667,
+        "stddev": 1908.597,
+        "min": 53378,
+        "max": 57011
+      }
+    },
+    "without_skill": {
+      "pass_rate": {
+        "mean": 1.0,
+        "stddev": 0.0,
+        "min": 1.0,
+        "max": 1.0
+      },
+      "time_seconds": {
+        "mean": 311.5,
+        "stddev": 105.7732,
+        "min": 190.4,
+        "max": 385.8
+      },
+      "tokens": {
+        "mean": 62529.0,
+        "stddev": 12331.5363,
+        "min": 52753,
+        "max": 76383
+      }
+    },
+    "delta": {
+      "pass_rate": "+0.00",
+      "time_seconds": "-79.2",
+      "tokens": "-6996"
+    }
+  },
+  "notes": [
+    "Pass rate ties at 100% both configs - the assertions do not discriminate: the model is already competent with herdr's discoverable CLI (--help + JSON output). Skill value shows in speed, tokens, and safety behavior instead.",
+    "Time per eval (with vs without): session-lifecycle 188s vs 358s (48% faster with skill); pane-grid 213s vs 190s (baseline marginally faster); window-management 296s vs 386s (23% faster). Mean delta -79s, -7k tokens.",
+    "SAFETY (not captured by assertions): the baseline window-management run attached to and stopped the DEFAULT session server with no live-agent check - on a machine with live agents that kills them all. The with-skill run ran herdr-cleanup.ps1 -DryRun (live-agent inventory) before stopping anything.",
+    "Baseline knowledge win folded back into the skill: HERDR_SESSION env var (simpler session isolation than HERDR_SOCKET_PATH) is real (src/session.rs:10) and is now documented in SKILL.md.",
+    "Two script defects surfaced by the with-skill window run and fixed post-run: FindWindowW exact-title false-fails from elevated shells (now falls back to WindowsTerminal MainWindowTitle match), and wt --maximized is unreliable (now enforced via ShowWindow SW_MAXIMIZE). Iteration-1 results reflect the pre-fix script.",
+    "Iteration-2 candidates: a discriminating orchestration eval (msg bus routing + team spawn with a scripted fake agent), and re-run of window-management against the fixed script."
+  ]
+}

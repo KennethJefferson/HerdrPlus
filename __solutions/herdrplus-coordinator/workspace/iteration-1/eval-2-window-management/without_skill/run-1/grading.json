@@ -1,0 +1,35 @@
+{
+  "expectations": [
+    {
+      "text": "all three phases documented with evidence",
+      "passed": true,
+      "evidence": "phases 0-3 with Win32, CIM process, socket API evidence plus PrintWindow screenshot"
+    },
+    {
+      "text": "window verifiably opened (not fired blind)",
+      "passed": true,
+      "evidence": "conhost window hwnd 1119016 IsWindowVisible, IsZoomed:true, maximized rect, DWM not cloaked, screenshot of rendered TUI"
+    },
+    {
+      "text": "server still running after window close",
+      "passed": true,
+      "evidence": "WM_CLOSE; client 22100 exited, server 29204 survived and answered status server --json running:true"
+    },
+    {
+      "text": "full cleanup, zero herdr processes",
+      "passed": true,
+      "evidence": "herdrplus server stop exit 0; Win32_Process shows zero herdr processes; postcheck.json herdr_process_count=0"
+    },
+    {
+      "text": "did not block on interactive TUI",
+      "passed": true,
+      "evidence": "TUI launched in separate conhost window via Start-Process"
+    }
+  ],
+  "summary": {
+    "failed": 0,
+    "pass_rate": 1.0,
+    "passed": 5,
+    "total": 5
+  }
+}

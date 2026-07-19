@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 This file is append-only: new entries go on top, existing entries are never rewritten.
 
+## [tooling] - 2026-07-19
+
+### Added
+
+- `herdrplus-coordinator` Claude Code skill (`__solutions/herdrplus-coordinator/skill/`, junctioned into `~/.claude/skills/`): coordinates HerdrPlus from outside or inside the app — window open/close/maximize via a pinned-title Windows Terminal window (`scripts/herdr-window.ps1`), RAM/server cleanup with a live-agent safety gate (`scripts/herdr-cleanup.ps1`), workspace/tab/pane lifecycle, layout management, command execution, agent driving, msg bus, and team spawn. Ships a full CLI reference and the field-tested orchestration playbook (message-loss verify-receipt loop, Escape unstick, ground-truth monitoring, per-agent quirks). Evaluated over 3 scenarios with-skill vs baseline (workspace at `__solutions/herdrplus-coordinator/workspace/iteration-1/`): 100% assertion pass both arms; skill −79s mean wall time, −7k tokens, and (unlike the baseline) performed a live-agent inventory before stopping servers. Documented `HERDR_SESSION` env var (found via baseline runs; `src/session.rs:10`) as the simplest session-isolation mechanism.
+
 ## [0.4.1] - 2026-07-19
 
 ### Fixed

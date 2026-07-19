@@ -1,0 +1,1325 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Eval Review</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@500;600&family=Lora:wght@400;500&display=swap" rel="stylesheet">
+  <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js" integrity="sha384-EnyY0/GSHQGSxSgMwaIPzSESbqoOLSexfnSMN2AP+39Ckmn92stwABZynq1JyzdT" crossorigin="anonymous"></script>
+  <style>
+    :root {
+      --bg: #faf9f5;
+      --surface: #ffffff;
+      --border: #e8e6dc;
+      --text: #141413;
+      --text-muted: #b0aea5;
+      --accent: #d97757;
+      --accent-hover: #c4613f;
+      --green: #788c5d;
+      --green-bg: #eef2e8;
+      --red: #c44;
+      --red-bg: #fceaea;
+      --header-bg: #141413;
+      --header-text: #faf9f5;
+      --radius: 6px;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Lora', Georgia, serif;
+      background: var(--bg);
+      color: var(--text);
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* ---- Header ---- */
+    .header {
+      background: var(--header-bg);
+      color: var(--header-text);
+      padding: 1rem 2rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-shrink: 0;
+    }
+    .header h1 {
+      font-family: 'Poppins', sans-serif;
+      font-size: 1.25rem;
+      font-weight: 600;
+    }
+    .header .instructions {
+      font-size: 0.8rem;
+      opacity: 0.7;
+      margin-top: 0.25rem;
+    }
+    .header .progress {
+      font-size: 0.875rem;
+      opacity: 0.8;
+      text-align: right;
+    }
+
+    /* ---- Main content ---- */
+    .main {
+      flex: 1;
+      overflow-y: auto;
+      padding: 1.5rem 2rem;
+      display: flex;
+      flex-direction: column;
+      gap: 1.25rem;
+    }
+
+    /* ---- Sections ---- */
+    .section {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      flex-shrink: 0;
+    }
+    .section-header {
+      font-family: 'Poppins', sans-serif;
+      padding: 0.75rem 1rem;
+      font-size: 0.75rem;
+      font-weight: 500;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--text-muted);
+      border-bottom: 1px solid var(--border);
+      background: var(--bg);
+    }
+    .section-body {
+      padding: 1rem;
+    }
+
+    /* ---- Config badge ---- */
+    .config-badge {
+      display: inline-block;
+      padding: 0.2rem 0.625rem;
+      border-radius: 9999px;
+      font-family: 'Poppins', sans-serif;
+      font-size: 0.6875rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+      margin-left: 0.75rem;
+      vertical-align: middle;
+    }
+    .config-badge.config-primary {
+      background: rgba(33, 150, 243, 0.12);
+      color: #1976d2;
+    }
+    .config-badge.config-baseline {
+      background: rgba(255, 193, 7, 0.15);
+      color: #f57f17;
+    }
+
+    /* ---- Prompt ---- */
+    .prompt-text {
+      white-space: pre-wrap;
+      font-size: 0.9375rem;
+      line-height: 1.6;
+    }
+
+    /* ---- Outputs ---- */
+    .output-file {
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+    }
+    .output-file + .output-file {
+      margin-top: 1rem;
+    }
+    .output-file-header {
+      padding: 0.5rem 0.75rem;
+      font-size: 0.8rem;
+      font-weight: 600;
+      color: var(--text-muted);
+      background: var(--bg);
+      border-bottom: 1px solid var(--border);
+      font-family: 'SF Mono', SFMono-Regular, Consolas, 'Liberation Mono', Menlo, monospace;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .output-file-header .dl-btn {
+      font-size: 0.7rem;
+      color: var(--accent);
+      text-decoration: none;
+      cursor: pointer;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      font-weight: 500;
+      opacity: 0.8;
+    }
+    .output-file-header .dl-btn:hover {
+      opacity: 1;
+      text-decoration: underline;
+    }
+    .output-file-content {
+      padding: 0.75rem;
+      overflow-x: auto;
+    }
+    .output-file-content pre {
+      font-size: 0.8125rem;
+      line-height: 1.5;
+      white-space: pre-wrap;
+      word-break: break-word;
+      font-family: 'SF Mono', SFMono-Regular, Consolas, 'Liberation Mono', Menlo, monospace;
+    }
+    .output-file-content img {
+      max-width: 100%;
+      height: auto;
+      border-radius: 4px;
+    }
+    .output-file-content iframe {
+      width: 100%;
+      height: 600px;
+      border: none;
+    }
+    .output-file-content table {
+      border-collapse: collapse;
+      font-size: 0.8125rem;
+      width: 100%;
+    }
+    .output-file-content table td,
+    .output-file-content table th {
+      border: 1px solid var(--border);
+      padding: 0.375rem 0.5rem;
+      text-align: left;
+    }
+    .output-file-content table th {
+      background: var(--bg);
+      font-weight: 600;
+    }
+    .output-file-content .download-link {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.5rem 1rem;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      color: var(--accent);
+      text-decoration: none;
+      font-size: 0.875rem;
+      cursor: pointer;
+    }
+    .output-file-content .download-link:hover {
+      background: var(--border);
+    }
+    .empty-state {
+      color: var(--text-muted);
+      font-style: italic;
+      padding: 2rem;
+      text-align: center;
+    }
+
+    /* ---- Feedback ---- */
+    .prev-feedback {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 0.625rem 0.75rem;
+      margin-top: 0.75rem;
+      font-size: 0.8125rem;
+      color: var(--text-muted);
+      line-height: 1.5;
+    }
+    .prev-feedback-label {
+      font-size: 0.7rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      margin-bottom: 0.25rem;
+      color: var(--text-muted);
+    }
+    .feedback-textarea {
+      width: 100%;
+      min-height: 100px;
+      padding: 0.75rem;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      font-family: inherit;
+      font-size: 0.9375rem;
+      line-height: 1.5;
+      resize: vertical;
+      color: var(--text);
+    }
+    .feedback-textarea:focus {
+      outline: none;
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+    }
+    .feedback-status {
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      margin-top: 0.5rem;
+      min-height: 1.1em;
+    }
+
+    /* ---- Grades (collapsible) ---- */
+    .grades-toggle {
+      display: flex;
+      align-items: center;
+      cursor: pointer;
+      user-select: none;
+    }
+    .grades-toggle:hover {
+      color: var(--accent);
+    }
+    .grades-toggle .arrow {
+      margin-right: 0.5rem;
+      transition: transform 0.15s;
+      font-size: 0.75rem;
+    }
+    .grades-toggle .arrow.open {
+      transform: rotate(90deg);
+    }
+    .grades-content {
+      display: none;
+      margin-top: 0.75rem;
+    }
+    .grades-content.open {
+      display: block;
+    }
+    .grades-summary {
+      font-size: 0.875rem;
+      margin-bottom: 0.75rem;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+    .grade-badge {
+      display: inline-block;
+      padding: 0.125rem 0.5rem;
+      border-radius: 9999px;
+      font-size: 0.75rem;
+      font-weight: 600;
+    }
+    .grade-pass { background: var(--green-bg); color: var(--green); }
+    .grade-fail { background: var(--red-bg); color: var(--red); }
+    .assertion-list {
+      list-style: none;
+    }
+    .assertion-item {
+      padding: 0.625rem 0;
+      border-bottom: 1px solid var(--border);
+      font-size: 0.8125rem;
+    }
+    .assertion-item:last-child { border-bottom: none; }
+    .assertion-status {
+      font-weight: 600;
+      margin-right: 0.5rem;
+    }
+    .assertion-status.pass { color: var(--green); }
+    .assertion-status.fail { color: var(--red); }
+    .assertion-evidence {
+      color: var(--text-muted);
+      font-size: 0.75rem;
+      margin-top: 0.25rem;
+      padding-left: 1.5rem;
+    }
+
+    /* ---- View tabs ---- */
+    .view-tabs {
+      display: flex;
+      gap: 0;
+      padding: 0 2rem;
+      background: var(--bg);
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+    .view-tab {
+      font-family: 'Poppins', sans-serif;
+      padding: 0.625rem 1.25rem;
+      font-size: 0.8125rem;
+      font-weight: 500;
+      cursor: pointer;
+      border: none;
+      background: none;
+      color: var(--text-muted);
+      border-bottom: 2px solid transparent;
+      transition: all 0.15s;
+    }
+    .view-tab:hover { color: var(--text); }
+    .view-tab.active {
+      color: var(--accent);
+      border-bottom-color: var(--accent);
+    }
+    .view-panel { display: none; }
+    .view-panel.active { display: flex; flex-direction: column; flex: 1; overflow: hidden; }
+
+    /* ---- Benchmark view ---- */
+    .benchmark-view {
+      padding: 1.5rem 2rem;
+      overflow-y: auto;
+      flex: 1;
+    }
+    .benchmark-table {
+      border-collapse: collapse;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      font-size: 0.8125rem;
+      width: 100%;
+      margin-bottom: 1.5rem;
+    }
+    .benchmark-table th, .benchmark-table td {
+      padding: 0.625rem 0.75rem;
+      text-align: left;
+      border: 1px solid var(--border);
+    }
+    .benchmark-table th {
+      font-family: 'Poppins', sans-serif;
+      background: var(--header-bg);
+      color: var(--header-text);
+      font-weight: 500;
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    .benchmark-table tr:hover { background: var(--bg); }
+    .benchmark-table tr.benchmark-row-with { background: rgba(33, 150, 243, 0.06); }
+    .benchmark-table tr.benchmark-row-without { background: rgba(255, 193, 7, 0.06); }
+    .benchmark-table tr.benchmark-row-with:hover { background: rgba(33, 150, 243, 0.12); }
+    .benchmark-table tr.benchmark-row-without:hover { background: rgba(255, 193, 7, 0.12); }
+    .benchmark-table tr.benchmark-row-avg { font-weight: 600; border-top: 2px solid var(--border); }
+    .benchmark-table tr.benchmark-row-avg.benchmark-row-with { background: rgba(33, 150, 243, 0.12); }
+    .benchmark-table tr.benchmark-row-avg.benchmark-row-without { background: rgba(255, 193, 7, 0.12); }
+    .benchmark-delta-positive { color: var(--green); font-weight: 600; }
+    .benchmark-delta-negative { color: var(--red); font-weight: 600; }
+    .benchmark-notes {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1rem;
+    }
+    .benchmark-notes h3 {
+      font-family: 'Poppins', sans-serif;
+      font-size: 0.875rem;
+      margin-bottom: 0.75rem;
+    }
+    .benchmark-notes ul {
+      list-style: disc;
+      padding-left: 1.25rem;
+    }
+    .benchmark-notes li {
+      font-size: 0.8125rem;
+      line-height: 1.6;
+      margin-bottom: 0.375rem;
+    }
+    .benchmark-empty {
+      color: var(--text-muted);
+      font-style: italic;
+      text-align: center;
+      padding: 3rem;
+    }
+
+    /* ---- Navigation ---- */
+    .nav {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 1rem 2rem;
+      border-top: 1px solid var(--border);
+      background: var(--surface);
+      flex-shrink: 0;
+    }
+    .nav-btn {
+      font-family: 'Poppins', sans-serif;
+      padding: 0.5rem 1.25rem;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: var(--surface);
+      cursor: pointer;
+      font-size: 0.875rem;
+      font-weight: 500;
+      color: var(--text);
+      transition: all 0.15s;
+    }
+    .nav-btn:hover:not(:disabled) {
+      background: var(--bg);
+      border-color: var(--text-muted);
+    }
+    .nav-btn:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+    }
+    .done-btn {
+      font-family: 'Poppins', sans-serif;
+      padding: 0.5rem 1.5rem;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: var(--surface);
+      color: var(--text);
+      cursor: pointer;
+      font-size: 0.875rem;
+      font-weight: 500;
+      transition: all 0.15s;
+    }
+    .done-btn:hover {
+      background: var(--bg);
+      border-color: var(--text-muted);
+    }
+    .done-btn.ready {
+      border: none;
+      background: var(--accent);
+      color: white;
+      font-weight: 600;
+    }
+    .done-btn.ready:hover {
+      background: var(--accent-hover);
+    }
+    /* ---- Done overlay ---- */
+    .done-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.5);
+      z-index: 100;
+      justify-content: center;
+      align-items: center;
+    }
+    .done-overlay.visible {
+      display: flex;
+    }
+    .done-card {
+      background: var(--surface);
+      border-radius: 12px;
+      padding: 2rem 3rem;
+      text-align: center;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+      max-width: 500px;
+    }
+    .done-card h2 {
+      font-size: 1.5rem;
+      margin-bottom: 0.5rem;
+    }
+    .done-card p {
+      color: var(--text-muted);
+      margin-bottom: 1.5rem;
+      line-height: 1.5;
+    }
+    .done-card .btn-row {
+      display: flex;
+      gap: 0.5rem;
+      justify-content: center;
+    }
+    .done-card button {
+      padding: 0.5rem 1.25rem;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: var(--surface);
+      cursor: pointer;
+      font-size: 0.875rem;
+    }
+    .done-card button:hover {
+      background: var(--bg);
+    }
+    /* ---- Toast ---- */
+    .toast {
+      position: fixed;
+      bottom: 5rem;
+      left: 50%;
+      transform: translateX(-50%);
+      background: var(--header-bg);
+      color: var(--header-text);
+      padding: 0.625rem 1.25rem;
+      border-radius: var(--radius);
+      font-size: 0.875rem;
+      opacity: 0;
+      transition: opacity 0.3s;
+      pointer-events: none;
+      z-index: 200;
+    }
+    .toast.visible {
+      opacity: 1;
+    }
+  </style>
+</head>
+<body>
+  <div id="app" style="height:100vh; display:flex; flex-direction:column;">
+    <div class="header">
+      <div>
+        <h1>Eval Review: <span id="skill-name"></span></h1>
+        <div class="instructions">Review each output and leave feedback below. Navigate with arrow keys or buttons. When done, copy feedback and paste into Claude Code.</div>
+      </div>
+      <div class="progress" id="progress"></div>
+    </div>
+
+    <!-- View tabs (only shown when benchmark data exists) -->
+    <div class="view-tabs" id="view-tabs" style="display:none;">
+      <button class="view-tab active" onclick="switchView('outputs')">Outputs</button>
+      <button class="view-tab" onclick="switchView('benchmark')">Benchmark</button>
+    </div>
+
+    <!-- Outputs panel (qualitative review) -->
+    <div class="view-panel active" id="panel-outputs">
+    <div class="main">
+      <!-- Prompt -->
+      <div class="section">
+        <div class="section-header">Prompt <span class="config-badge" id="config-badge" style="display:none;"></span></div>
+        <div class="section-body">
+          <div class="prompt-text" id="prompt-text"></div>
+        </div>
+      </div>
+
+      <!-- Outputs -->
+      <div class="section">
+        <div class="section-header">Output</div>
+        <div class="section-body" id="outputs-body">
+          <div class="empty-state">No output files found</div>
+        </div>
+      </div>
+
+      <!-- Previous Output (collapsible) -->
+      <div class="section" id="prev-outputs-section" style="display:none;">
+        <div class="section-header">
+          <div class="grades-toggle" onclick="togglePrevOutputs()">
+            <span class="arrow" id="prev-outputs-arrow">&#9654;</span>
+            Previous Output
+          </div>
+        </div>
+        <div class="grades-content" id="prev-outputs-content"></div>
+      </div>
+
+      <!-- Grades (collapsible) -->
+      <div class="section" id="grades-section" style="display:none;">
+        <div class="section-header">
+          <div class="grades-toggle" onclick="toggleGrades()">
+            <span class="arrow" id="grades-arrow">&#9654;</span>
+            Formal Grades
+          </div>
+        </div>
+        <div class="grades-content" id="grades-content"></div>
+      </div>
+
+      <!-- Feedback -->
+      <div class="section">
+        <div class="section-header">Your Feedback</div>
+        <div class="section-body">
+          <textarea
+            class="feedback-textarea"
+            id="feedback"
+            placeholder="What do you think of this output? Any issues, suggestions, or things that look great?"
+          ></textarea>
+          <div class="feedback-status" id="feedback-status"></div>
+          <div class="prev-feedback" id="prev-feedback" style="display:none;">
+            <div class="prev-feedback-label">Previous feedback</div>
+            <div id="prev-feedback-text"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="nav" id="outputs-nav">
+      <button class="nav-btn" id="prev-btn" onclick="navigate(-1)">&#8592; Previous</button>
+      <button class="done-btn" id="done-btn" onclick="showDoneDialog()">Submit All Reviews</button>
+      <button class="nav-btn" id="next-btn" onclick="navigate(1)">Next &#8594;</button>
+    </div>
+    </div><!-- end panel-outputs -->
+
+    <!-- Benchmark panel (quantitative stats) -->
+    <div class="view-panel" id="panel-benchmark">
+      <div class="benchmark-view" id="benchmark-content">
+        <div class="benchmark-empty">No benchmark data available. Run a benchmark to see quantitative results here.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Done overlay -->
+  <div class="done-overlay" id="done-overlay">
+    <div class="done-card">
+      <h2>Review Complete</h2>
+      <p>Your feedback has been saved. Go back to your Claude Code session and tell Claude you're done reviewing.</p>
+      <div class="btn-row">
+        <button onclick="closeDoneDialog()">OK</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast -->
+  <div class="toast" id="toast"></div>
+
+  <script>
+    // ---- Embedded data (injected by generate_review.py) ----
+    const EMBEDDED_DATA = {"skill_name": "herdrplus-coordinator", "runs": [{"id": "eval-0-session-lifecycle-cleanup-with_skill-run-1", "prompt": "(No prompt found)", "eval_id": null, "outputs": [{"name": "report.md", "type": "text", "content": "# HerdrPlus session lifecycle + cleanup report (session `ram1`)\n\nDate: 2026-07-19\nBinary: `K:\\Downloads\\__Projects.Mine\\herdr4Windows\\__solutions\\target\\release\\herdrplus.exe` (v0.7.4, protocol 19)\nMethod: `herdrplus-coordinator` skill \u2014 named throwaway session so the **default session was never touched** (it stayed `running: false` throughout, and only the `ram1` session I created was ever stopped).\n\nWhy RAM lingers after closing the window: herdr is client/server. Closing the TUI window only detaches the client; the session server (plus conpty hosts and pane child processes) keeps running by design. Reclaiming RAM requires stopping the server(s), which is what this run demonstrates end-to-end.\n\n---\n\n## 1. Baseline (before starting anything)\n\n```powershell\n$exe = 'K:\\Downloads\\__Projects.Mine\\herdr4Windows\\__solutions\\target\\release\\herdrplus.exe'\nGet-Process herdrplus, herdr -ErrorAction SilentlyContinue   # -> nothing\n& $exe status --json\n& $exe session list --json\n```\n\nEvidence:\n\n- `Get-Process herdr*` returned **no processes**.\n- `status --json` -> `\"server\":{\"status\":\"not_running\",\"running\":false,...}`\n- `session list --json` -> `default` and `cctest` both `\"running\":false`. No session named `ram1` existed.\n\n## 2. Start throwaway session `ram1` (state: RUNNING)\n\nStarted a **headless** server for a named session \u2014 no window needed, default session untouched:\n\n```powershell\nStart-Process -FilePath $exe -ArgumentList '--session','ram1','server' -WindowStyle Hidden -PassThru\n# launcher_pid=4192\n& $exe session list --json\n```\n\nEvidence (server actually running):\n\n- `session list --json` now includes:\n  `{\"default\":false,\"name\":\"ram1\",\"running\":true,\"session_dir\":\"C:\\Users\\Tony Baloney\\AppData\\Roaming\\herdr\\sessions\\ram1\",\"socket_path\":\"C:\\Users\\Tony Baloney\\AppData\\Roaming\\herdr\\sessions\\ram1\\herdr.sock\"}`\n  while `default` remained `\"running\":false`.\n- `status --json` aimed at ram1's own socket confirmed a live, compatible server:\n\n```powershell\n$env:HERDR_SOCKET_PATH = 'C:\\Users\\Tony Baloney\\AppData\\Roaming\\herdr\\sessions\\ram1\\herdr.sock'\n& $exe status --json\n# -> \"server\":{\"status\":\"running\",\"running\":true,\"version\":\"0.7.4\",\"protocol\":19,\"compatible\":true,\n#              \"socket\":\"C:\\...\\sessions\\ram1\\herdr.sock\"}\nRemove-Item Env:HERDR_SOCKET_PATH\n```\n\n- Process inventory: one `herdrplus` process, **PID 4192, 14.0 MB** working set.\n\n## 3. Pre-shutdown safety inventory (dry run)\n\n```powershell\npwsh -File K:\\Downloads\\__Projects.Mine\\herdr4Windows\\__solutions\\herdrplus-coordinator\\skill\\scripts\\herdr-cleanup.ps1 -DryRun\n```\n\nOutput:\n\n```json\n{\n  \"result\": \"dry_run\",\n  \"ram_mb\": 14.0,\n  \"running_sessions\": [\"ram1\"],\n  \"live_agents\": [],\n  \"processes\": [{ \"pid\": 4192, \"name\": \"herdrplus\", \"ram_mb\": 14.0 }],\n  \"would\": \"session stop each running session, then force-kill leftover herdr* processes\"\n}\n```\n\nOnly `ram1` (created by this run) was running; **no live agents** would be killed, so it was safe to proceed without `-Force`.\n\n## 4. Shutdown (state: STOPPED)\n\n```powershell\npwsh -File K:\\Downloads\\__Projects.Mine\\herdr4Windows\\__solutions\\herdrplus-coordinator\\skill\\scripts\\herdr-cleanup.ps1\n```\n\n(Internally: `herdrplus session stop ram1 --json`, 3 s grace, then force-kill of any leftover `herdr*` \u2014 none needed.)\n\nOutput:\n\n```json\n{\n  \"result\": \"clean\",\n  \"sessions_stopped\": [\"ram1\"],\n  \"force_killed\": [],\n  \"remaining\": [],\n  \"ram_freed_mb\": 14.1,\n  \"note\": \"The herdrplus.exe binary is now unlocked for rebuilds.\"\n}\n```\n\nGraceful stop only \u2014 nothing had to be force-killed. **14.1 MB of RAM reclaimed.**\n\n## 5. Final verification (state: PROCESS-FREE)\n\n```powershell\n& $exe session delete ram1 --json     # remove the throwaway session record entirely\n& $exe session list --json\n$procs = @(Get-Process herdrplus, herdr -ErrorAction SilentlyContinue); \"herdr_process_count=$($procs.Count)\"\n& $exe status --json\n```\n\nEvidence:\n\n- `session delete ram1 --json` -> `{\"deleted\":true, \"session\":{\"name\":\"ram1\",\"running\":false,...}}`\n- `session list --json` -> back to exactly the baseline: `default` and `cctest`, both `\"running\":false`; `ram1` gone.\n- `Get-Process herdrplus, herdr` -> **herdr_process_count=0** (no herdr processes of any kind remain).\n- `status --json` -> `\"server\":{\"status\":\"not_running\",\"running\":false,...}`\n\n## Conclusion\n\n| State        | Evidence                                                                                  |\n| ------------ | ----------------------------------------------------------------------------------------- |\n| Running      | `session list` shows `ram1 running:true`; `status --json` on ram1 socket `running:true`; PID 4192 @ 14 MB |\n| Stopped      | cleanup result `clean`, `sessions_stopped:[\"ram1\"]`, `force_killed:[]`, 14.1 MB freed      |\n| Process-free | `Get-Process herdrplus, herdr` count = 0; server `not_running`; `ram1` session deleted     |\n\nThe default session was never started, stopped, or modified. For future RAM complaints after closing the herdr window: `herdr-cleanup.ps1 -DryRun` to inventory, then `herdr-cleanup.ps1` (add `-Force` only if you intend to kill live agent panes).\n"}], "grading": {"expectations": [{"text": "report.md exists and documents start/stop/final process check with real evidence", "passed": true, "evidence": "report.md has baseline, RUNNING (session list ram1 running:true, status via ram1 socket), dry-run inventory, shutdown, and process-free sections with captured JSON"}, {"text": "named session ram1 actually started", "passed": true, "evidence": "session list --json shows ram1 running:true, PID 4192, 14MB; status --json via HERDR_SOCKET_PATH shows running, protocol 19"}, {"text": "default session never touched", "passed": true, "evidence": "report shows default running:false throughout; only ram1 stopped"}, {"text": "postcheck shows zero herdr processes", "passed": true, "evidence": "postcheck.json: herdr_process_count=0"}, {"text": "graceful-first shutdown", "passed": true, "evidence": "herdr-cleanup.ps1 -DryRun safety inventory first (live_agents:[]), then graceful cleanup: result clean, force_killed []"}], "summary": {"failed": 0, "pass_rate": 1.0, "passed": 5, "total": 5}}}, {"id": "eval-0-session-lifecycle-cleanup-without_skill-run-1", "prompt": "(No prompt found)", "eval_id": null, "outputs": [{"name": "report.md", "type": "text", "content": "# herdr session lifecycle cleanup \u2014 ram1\n\nDate: 2026-07-19\nBinary: `K:\\Downloads\\__Projects.Mine\\herdr4Windows\\__solutions\\target\\release\\herdrplus.exe` (herdr 0.7.4, protocol 19)\nConstraint honored: the `default` session was never started, attached, stopped, or deleted. It stayed `running: false` throughout.\n\n## 1. Baseline (before start)\n\nCommands:\n\n```powershell\nGet-Process | Where-Object { $_.ProcessName -match 'herdr' }\n& $exe session list --json\n```\n\nEvidence:\n\n```\n(no herdr processes)\n\n{\"sessions\":[{\"default\":true,\"name\":\"default\",\"running\":false,\n  \"session_dir\":\"C:\\Users\\Tony Baloney\\AppData\\Roaming\\herdr\",\n  \"socket_path\":\"C:\\Users\\Tony Baloney\\AppData\\Roaming\\herdr\\herdr.sock\"}]}\n```\n\nNo herdr processes; only the (stopped) default session registered.\n\n## 2. Start throwaway session `ram1` (state: RUNNING)\n\n`herdr` selects a session via the `HERDR_SESSION` env var, and `herdr server` runs the server headless (no TUI attach needed \u2014 safe unattended). Commands:\n\n```powershell\n$env:HERDR_SESSION = 'ram1'\nStart-Process -FilePath $exe -ArgumentList 'server' -WindowStyle Hidden -PassThru   # spawned pid 21928\n& $exe status server\n& $exe session list --json\n```\n\nEvidence (after ~5s startup; an immediate check at 3s still reported \"not running\" \u2014 the server needs a few seconds before its socket accepts hellos):\n\n```\nstatus: running\nversion: 0.7.4\nprotocol: 19\ncompatible: yes\nsocket: C:\\Users\\Tony Baloney\\AppData\\Roaming\\herdr\\sessions\\ram1\\herdr.sock\n\nsession list: ... {\"default\":false,\"name\":\"ram1\",\"running\":true, ...}\n              ... {\"default\":true,\"name\":\"default\",\"running\":false, ...}\n\nGet-Process -Id 21928  ->  21928 herdrplus  WorkingSet 7,483,392 bytes\n```\n\nServer confirmed running: live process (pid 21928), reachable API socket, `running: true` in the session registry. Default session untouched (`running: false`).\n\n## 3. Shut down (state: STOPPED)\n\nCommand:\n\n```powershell\n& $exe session stop ram1 --json\n```\n\nEvidence \u2014 the stop initially reported a timeout:\n\n```\n{\"error\":{\"code\":\"session_stop_failed\",\"message\":\"session ram1 did not stop within 15000ms;\n sockets are still reachable at ...\\sessions\\ram1\\herdr.sock, ...\\herdr-client.sock\"}}\n```\n\nThe stop request did land, but the server took longer than the CLI's 15s wait to exit. Roughly 20-30s later:\n\n```powershell\n$env:HERDR_SESSION = 'ram1'\n& $exe status server\n```\n\n```\nstatus: not running\nsocket: C:\\Users\\Tony Baloney\\AppData\\Roaming\\herdr\\sessions\\ram1\\herdr.sock\n\nGet-Process -Id 21928  ->  pid 21928 gone\n```\n\nNote for the RAM-hogging complaint: `session stop` can report failure while the server is actually shutting down slowly. Always re-verify with `herdr status server` + a process check after ~30s before force-killing; the immediate error is misleading.\n\n## 4. Delete throwaway session + final verification (state: PROCESS-FREE)\n\nCommands:\n\n```powershell\n& $exe session delete ram1 --json\n& $exe session list --json\nTest-Path 'C:\\Users\\Tony Baloney\\AppData\\Roaming\\herdr\\sessions\\ram1'\nGet-Process | Where-Object { $_.ProcessName -match 'herdr' }\n```\n\nEvidence:\n\n```\n{\"deleted\":true,\"session\":{\"default\":false,\"name\":\"ram1\",\"running\":false, ...}}\n\n{\"sessions\":[{\"default\":true,\"name\":\"default\",\"running\":false, ...}]}   # only default remains\n\nTest-Path sessions\\ram1  ->  False   # session dir removed\n\nNO herdr processes running\n```\n\nFinal state: zero herdr/herdrplus processes, ram1 fully deleted (registry entry and session directory), default session left exactly as found.\n"}], "grading": {"expectations": [{"text": "report.md exists and documents start/stop/final process check with real evidence", "passed": true, "evidence": "report.md has baseline/running/stopped/process-free sections with captured JSON and process checks"}, {"text": "named session ram1 actually started", "passed": true, "evidence": "HERDR_SESSION=ram1 + herdrplus server headless; session list shows ram1 running:true, PID 21928"}, {"text": "default session never touched", "passed": true, "evidence": "default stayed running:false; never attached or stopped"}, {"text": "postcheck shows zero herdr processes", "passed": true, "evidence": "postcheck.json: herdr_process_count=0"}, {"text": "graceful-first shutdown", "passed": true, "evidence": "session stop ram1; hit misleading 15s timeout error, correctly re-verified instead of force-killing; documented the pitfall"}], "summary": {"failed": 0, "pass_rate": 1.0, "passed": 5, "total": 5}}}, {"id": "eval-1-workspace-pane-grid-with_skill-run-1", "prompt": "(No prompt found)", "eval_id": null, "outputs": [{"name": "report.md", "type": "text", "content": "# Eval 1 \u2014 Workspace pane grid (with skill)\n\nDate: 2026-07-19\nBinary: `K:\\Downloads\\__Projects.Mine\\herdr4Windows\\__solutions\\target\\release\\herdrplus.exe` (v0.7.4, protocol 19)\nSession: isolated named session `grid1` (default session untouched; it was not running before, during, or after).\n\n## Session setup\n\n- Headless server started with `herdrplus --session grid1 server` (background).\n- Socket confirmed via `session list --json`:\n  `C:\\Users\\Tony Baloney\\AppData\\Roaming\\herdr\\sessions\\grid1\\herdr.sock`\n- All CLI calls aimed at the session via `HERDR_SOCKET_PATH`.\n\n## Workspace and pane IDs\n\nWorkspace `w1` (label `grid`), tab `w1:t1`, cwd `K:\\Downloads\\__Projects.Mine\\herdr4Windows`.\n\nLayout: left column + right column split in two (split `w1:p1` right, then split `w1:p2` down).\n\n| Label | Pane ID | Terminal ID           |\n|-------|---------|-----------------------|\n| build | w1:p1   | term_656f971f0a8dc1   |\n| test  | w1:p2   | term_656f973f60a052   |\n| logs  | w1:p3   | term_656f975029ecd3   |\n\n## Captured outputs\n\nCommands submitted with `pane run`, confirmed with `wait output` (all exited 0, no timeout). Captured text from each pane (`recent-unwrapped` source, embedded in the wait-output match response):\n\n**build (w1:p1)**\n```\nPS K:\\Downloads\\__Projects.Mine\\herdr4Windows> echo ready-build\nready-build\nPS K:\\Downloads\\__Projects.Mine\\herdr4Windows>\n```\n\n**test (w1:p2)**\n```\nPS K:\\Downloads\\__Projects.Mine\\herdr4Windows> echo ready-test\nready-test\nPS K:\\Downloads\\__Projects.Mine\\herdr4Windows>\n```\n\n**logs (w1:p3)**\n```\nPS K:\\Downloads\\__Projects.Mine\\herdr4Windows> echo ready-logs\nready-logs\nPS K:\\Downloads\\__Projects.Mine\\herdr4Windows>\n```\n\n## Balance\n\n`pane balance --tab w1:t1` returned `layout_balanced` with `\"changed\": true`. Resulting tree (equal-area):\n\n```json\n{\"direction\":\"right\",\"ratio\":0.33333334,\n \"first\":{\"pane_id\":\"w1:p1\",\"label\":\"build\"},\n \"second\":{\"direction\":\"down\",\"ratio\":0.5,\n   \"first\":{\"pane_id\":\"w1:p2\",\"label\":\"test\"},\n   \"second\":{\"pane_id\":\"w1:p3\",\"label\":\"logs\"}}}\n```\n\n## Teardown evidence\n\n1. `session stop grid1 --json` -> `{\"stopped\":true, \"session\":{\"name\":\"grid1\",\"running\":false,...}}`\n2. Background server process exited cleanly (exit code 0) after the stop.\n3. `session delete grid1 --json` -> `{\"deleted\":true,...}`\n4. Final `session list --json` shows only the default session (not running):\n   ```json\n   {\"sessions\":[{\"default\":true,\"name\":\"default\",\"running\":false,\n     \"session_dir\":\"C:\\Users\\Tony Baloney\\AppData\\Roaming\\herdr\",\n     \"socket_path\":\"C:\\Users\\Tony Baloney\\AppData\\Roaming\\herdr\\herdr.sock\"}]}\n   ```\n5. `Get-Process herdr*` returned no processes \u2014 no leftover herdrplus/server/pane processes, no lingering RAM.\n"}], "grading": {"expectations": [{"text": "report lists three distinct real pane IDs from JSON", "passed": true, "evidence": "w1:p1/w1:p2/w1:p3 with terminal IDs term_656f97*"}, {"text": "captured ready-build/ready-test/ready-logs from correct panes", "passed": true, "evidence": "per-pane captured output blocks show each ready-* marker at the matching labeled pane"}, {"text": "panes labeled build/test/logs and balance invoked", "passed": true, "evidence": "labels in layout tree; pane balance --tab w1:t1 returned layout_balanced changed:true with equal-area ratios"}, {"text": "isolated grid1 session, not default", "passed": true, "evidence": "headless herdrplus --session grid1 server; commands aimed via HERDR_SOCKET_PATH; default not running throughout"}, {"text": "postcheck shows zero herdr processes", "passed": true, "evidence": "postcheck.json: herdr_process_count=0; session stopped+deleted"}], "summary": {"failed": 0, "pass_rate": 1.0, "passed": 5, "total": 5}}}, {"id": "eval-1-workspace-pane-grid-without_skill-run-1", "prompt": "(No prompt found)", "eval_id": null, "outputs": [{"name": "report.md", "type": "text", "content": "# Eval 1 \u2014 Workspace Pane Grid (without_skill)\n\nDate: 2026-07-19\nBinary: `K:\\Downloads\\__Projects.Mine\\herdr4Windows\\__solutions\\target\\release\\herdrplus.exe` (herdr 0.7.4, protocol 19)\nSession isolation: all CLI commands ran with `HERDR_SESSION=grid1` against a dedicated headless server (`herdr server`) with socket `C:\\Users\\Tony Baloney\\AppData\\Roaming\\herdr\\sessions\\grid1\\herdr.sock`. The default session was never started (verified `status: not running` before and after).\n\n## Workspace and panes\n\nWorkspace `w1` (label `grid`), tab `w1:t1`. Layout built by splitting the root pane right, then splitting the right pane down: build occupies the full-height left column; test top-right; logs bottom-right.\n\n| Label | Pane ID | Terminal ID          | Command run       |\n|-------|---------|----------------------|-------------------|\n| build | w1:p1   | term_656f9addbd2e21  | `echo ready-build` |\n| test  | w1:p2   | term_656f9ae4801dc2  | `echo ready-test`  |\n| logs  | w1:p3   | term_656f9ae8f29303  | `echo ready-logs`  |\n\n## Captured output\n\nVia `herdr pane run <id> \"<cmd>\"` followed by `herdr pane read <id> --source recent` (p3 re-read with `--source recent-unwrapped` to undo terminal line wrap).\n\n### build (w1:p1)\n```\nPS C:\\Users\\Tony Baloney> echo ready-build\nready-build\nPS C:\\Users\\Tony Baloney>\n```\n\n### test (w1:p2)\n```\nPS C:\\Users\\Tony Baloney> echo ready-test\nready-test\nPS C:\\Users\\Tony Baloney>\n```\n\n### logs (w1:p3)\n```\nPS C:\\Users\\Tony Baloney> echo ready-logs\nready-logs\nPS C:\\Users\\Tony Baloney>\n```\n\n## Balance\n\n`herdr pane balance --tab w1:t1` returned `\"changed\": true`, root split ratio adjusted 0.5 -> 0.33333334 (three panes equalized; inner down-split stayed 0.5). Post-balance layout rects:\n\n- w1:p1 (build): x=26 y=1  w=18 h=23\n- w1:p2 (test):  x=44 y=1  w=36 h=12\n- w1:p3 (logs):  x=44 y=13 w=36 h=11\n\n## Teardown evidence\n\n1. `herdr session stop grid1 --json` -> `{\"stopped\": true, \"session\": {\"name\": \"grid1\", \"running\": false, ...}}`\n2. `herdr session delete grid1 --json` -> `{\"deleted\": true, ...}`\n3. `herdr session list --json` after teardown lists only the default session (`running: false`):\n   `{\"sessions\":[{\"default\":true,\"name\":\"default\",\"running\":false,\"session_dir\":\"C:\\Users\\Tony Baloney\\AppData\\Roaming\\herdr\",\"socket_path\":\"C:\\Users\\Tony Baloney\\AppData\\Roaming\\herdr\\herdr.sock\"}]}`\n4. The background `herdr server` process for grid1 exited with code 0.\n5. `C:\\Users\\Tony Baloney\\AppData\\Roaming\\herdr\\sessions\\` no longer contains a `grid1` directory.\n6. Default session server status after teardown: `not running` (untouched throughout).\n"}], "grading": {"expectations": [{"text": "report lists three distinct real pane IDs from JSON", "passed": true, "evidence": "w1:p1/w1:p2/w1:p3 with terminal IDs term_656f9a*"}, {"text": "captured ready-build/ready-test/ready-logs from correct panes", "passed": true, "evidence": "per-pane pane read captures show each ready-* marker; p3 re-read with recent-unwrapped to fix wrapping"}, {"text": "panes labeled build/test/logs and balance invoked", "passed": true, "evidence": "pane rename used; balance changed:true, ratio 0.5->0.3333, post-balance rects listed"}, {"text": "isolated grid1 session, not default", "passed": true, "evidence": "HERDR_SESSION=grid1 headless server; default verified not running before and after"}, {"text": "postcheck shows zero herdr processes", "passed": true, "evidence": "postcheck.json: herdr_process_count=0; grid1 stopped, deleted, dir gone"}], "summary": {"failed": 0, "pass_rate": 1.0, "passed": 5, "total": 5}}}, {"id": "eval-2-window-management-with_skill-run-1", "prompt": "(No prompt found)", "eval_id": null, "outputs": [{"name": "report.md", "type": "text", "content": "# HerdrPlus Window Management \u2014 Eval 2 Report (with skill)\n\nDate: 2026-07-19. Executed per `herdrplus-coordinator` skill (SKILL.md + `scripts/herdr-window.ps1` + `scripts/herdr-cleanup.ps1`).\nBinary: `K:\\Downloads\\__Projects.Mine\\herdr4Windows\\__solutions\\target\\release\\herdrplus.exe` (v0.7.4, protocol 19).\nSession: `default`. Initial state confirmed clean: `status --json` -> `\"server\":{\"status\":\"not_running\"}`, zero `herdr*` processes.\n\n## Phase 1 \u2014 Open the window, maximized\n\nRan the skill script:\n\n```\npwsh -File scripts\\herdr-window.ps1 -Action open\n```\n\nThe script launched `wt -w herdrplus-default --maximized new-tab --title \"HerdrPlus[default]\" --suppressApplicationTitle -- herdrplus.exe`, but its `FindWindowW`-by-title poll timed out (`result: launched_but_window_not_found`, exit 1). Investigation showed this was a **false negative from the script's verification, not a launch failure**: the window existed and was visible.\n\nEvidence (direct Win32 inspection of the WindowsTerminal process, PID 2124):\n\n```json\n{\n  \"title\": \"HerdrPlus[default]\",\n  \"title_hex\": \"48 65 72 64 72 50 6C 75 73 5B 64 65 66 61 75 6C 74 5D\",\n  \"hwnd\": 266894,\n  \"visible\": true,\n  \"find_exact\": 0,\n  \"maximized\": false\n}\n```\n\n`find_exact: 0` means `FindWindowW(null, title)` returns nothing from this shell \u2014 a UIPI/window-station quirk \u2014 and wt's `--maximized` flag was also not honored.\n\nTwo fixups applied via the window handle taken from the process (fallback consistent with the script's own `Find-HerdrWindow` strategy): `ShowWindow(hwnd, SW_MAXIMIZE)` + `SetForegroundWindow(hwnd)`.\n\nMaximization verified by two independent signals:\n\n```json\n{ \"maximized\": true, \"rect\": \"left=-8 top=-8 right=1928 bottom=1040\" }\n```\n\n`IsZoomed = true`, and the rect spans the full 1920x1080 desktop with the standard -8px maximized border offsets.\n\n## Phase 2 \u2014 Verify it is actually open\n\nProcess and server evidence while the window was up:\n\n```\n   Id ProcessName RAM_MB StartTime\n 8224 herdrplus     9.70 7/19/2026 12:44:00 PM   <- client (inside the wt window)\n24208 herdrplus    18.90 7/19/2026 12:44:04 PM   <- server (spawned by client)\n```\n\n```\nherdrplus status --json ->\n\"server\":{\"status\":\"running\",\"running\":true,\"version\":\"0.7.4\",\"protocol\":19,\n \"capabilities\":{\"live_handoff\":false,\"detached_server_daemon\":true},\n \"socket\":\"C:\\Users\\Tony Baloney\\AppData\\Roaming\\herdr\\herdr.sock\"}\n```\n\n```\nherdrplus workspace list ->\n{\"workspaces\":[{\"workspace_id\":\"w1\",\"label\":\"herdr4Windows\",\"tab_count\":1,\"pane_count\":1,\"focused\":true}]}\n```\n\nWindow visible + maximized, client and server processes present, server answering on the socket with a live workspace: **open verified**.\n\n## Phase 3 \u2014 Close only the window; server must survive\n\nSent `WM_CLOSE` (0x0010) via `PostMessageW` to hwnd 266894 \u2014 exactly what `herdr-window.ps1 -Action close` does (its title lookup has the same FindWindowW blind spot, so the message was posted directly to the known handle).\n\nState 4 seconds after close:\n\n```\nwt 2124 alive:      False   <- window gone\nclient 8224 alive:  False   <- TUI client gone\nserver 24208 alive: True    <- server survived\n\n   Id RAM_MB\n24208  18.70\n\nherdrplus status --json -> \"server\":{\"status\":\"running\",\"running\":true, ...}\n```\n\nThe client/server design held: closing the window detached only the client; the server (PID 24208, ~18.7 MB) kept running and kept answering on the socket. **Server persistence verified**.\n\n## Phase 4 \u2014 Full server cleanup (reclaim RAM)\n\nDry-run inventory first (skill safety step \u2014 checks for live agents before destroying anything):\n\n```\npwsh -File scripts\\herdr-cleanup.ps1 -DryRun ->\n{ \"running_sessions\": [\"default\"], \"processes\": [{\"pid\":24208,\"name\":\"herdrplus\",\"ram_mb\":18.4}],\n  \"live_agents\": [], \"ram_mb\": 18.4, \"result\": \"dry_run\" }\n```\n\nNo live agents detected, so `-Force` was unnecessary. Real run:\n\n```\npwsh -File scripts\\herdr-cleanup.ps1 ->\n{ \"result\": \"clean\", \"sessions_stopped\": [\"default\"], \"ram_freed_mb\": 18.5,\n  \"force_killed\": [], \"remaining\": [],\n  \"note\": \"The herdrplus.exe binary is now unlocked for rebuilds.\" }\n```\n\nGraceful `session stop` succeeded; nothing needed force-killing.\n\n## Final verification \u2014 nothing left in RAM\n\nIndependent post-cleanup check:\n\n```\nherdr processes remaining: 0\nherdrplus status --json -> \"server\":{\"status\":\"not_running\",\"running\":false}\nTest-Path ...\\Roaming\\herdr\\herdr.sock -> False   (socket file removed)\n```\n\n## Outcome\n\n| Phase | Result |\n|---|---|\n| 1. Open window maximized | Done (script launch + direct Win32 maximize; IsZoomed=true, full-screen rect) |\n| 2. Verify open | Done (window visible, client PID 8224 + server PID 24208, server running, workspace w1) |\n| 3. Close window only | Done (wt + client exited; server PID 24208 survived and answered status) |\n| 4. Full cleanup | Done (`result: clean`, 18.5 MB freed, 0 processes, socket gone, server not_running) |\n\nNoted defect for the skill: `herdr-window.ps1`'s `FindWindowW($null, $title)` verification returns 0 from this (elevated) automation shell even when the exact-title window exists, so `open` false-fails and `close`/`maximize` would miss the window. The reliable fallback is resolving the hwnd from `Get-Process WindowsTerminal | Where MainWindowTitle -eq 'HerdrPlus[<session>]'`.\n"}], "grading": {"expectations": [{"text": "all three phases documented with evidence", "passed": true, "evidence": "phases open/verify/close-with-server-survival/cleanup each have JSON+process evidence"}, {"text": "window verifiably opened (not fired blind)", "passed": true, "evidence": "wt window found via WindowsTerminal PID 2124, title HerdrPlus[default], visible:true, then IsZoomed:true with full-desktop rect after ShowWindow fixup; script's FindWindowW-by-title false-failed (defect noted and since fixed)"}, {"text": "server still running after window close", "passed": true, "evidence": "WM_CLOSE to hwnd 266894; client exited, server PID 24208 stayed alive and answered status --json running:true"}, {"text": "full cleanup, zero herdr processes", "passed": true, "evidence": "herdr-cleanup.ps1 dry-run then real: default session stopped, 18.5MB freed, force_killed []; postcheck.json herdr_process_count=0, herdrplus_windows=0"}, {"text": "did not block on interactive TUI", "passed": true, "evidence": "TUI ran in separate wt window; agent shell never attached"}], "summary": {"failed": 0, "pass_rate": 1.0, "passed": 5, "total": 5}}}, {"id": "eval-2-window-management-without_skill-run-1", "prompt": "(No prompt found)", "eval_id": null, "outputs": [{"name": "phase1-window-open-maximized.png", "type": "image", "mime": "image/png", "data_uri": "data:image/png;base64,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iCIghEQEhAAAAAAAAAAAQBQBISQiIAQAAAAAAAAAAKIICCERASEAAAAAAAAAABBFQAiJCAgBAAAAAAAAAIAoAkJIREAIAAAAAAAAAABEERBCIgJCAAAAAAAAAAAgioAQEhEQAgAAAAAAAAAAUQSEkIiAEAAAAAAAAAAAiCIghEQEhAAAAAAAAAAAQBQBISQiIAQAAAAAAAAAAKIICCERASEAAAAAAAAAABBFQAiJCAgBAAAAAAAAAIAoAkJIREAIAAAAAAAAAABEERBCIgJCAAAAAAAAAAAgioAQEhEQAgAAAAAAAAAAUQSEkIiAEAAAAAAAAAAAiCIghEQEhAAAAAAAAAAAQBQBISQiIAQAAAAAAAAAAKIICCERASEAAAAAAAAAABBFQAiJCAgBAAAAAAAAAIAoAkJIREAIAAAAAAAAAABEERBCIgJCAAAAAAAAAAAgioAQEhEQAgAAAAAAAAAAUQSEkIiAEAAAAAAAAAAAiCIghEQEhAAAAAAAAAAAQBQBISQiIAQAAAAAAAAAAKIICCERASEAAAAAAAAAABBFQAiJCAgBAAAAAAAAAIAoAkJIREAIAAAAAAAAAABEERBCIgJCAAAAAAAAAAAgioAQEhEQAgAAAAAAAAAAUQSEkIiAEAAAAAAAAAAAiCIghEQEhAAAAAAAAAAAQBQBISQiIAQAAAAAAAAAAKIICCERASEAAAAAAAAAABBFQAiJCAgBAAAAAAAAAIAoAkJIREAIAAAAAAAAAABEERBCIgJCAAAAAAAAAAAgioAQEhEQAgAAAAAAAAAAUQSEkIiAEAAAAAAAAAAAiCIghEQEhAAAAAAAAAAAQBQBISQiIAQAAAAAAAAAAKIICCERASEAAAAAAAAAABBFQAiJCAgBAAAAAAAAAIAoAkJIREAIAAAAAAAAAABEERBCIgJCAAAAAAAAAAAgioAQEhEQAgAAAAAAAAAAUQSEkIiAEAAAAAAAAAAAiCIghEQEhAAAAAAAAAAAQBQBISQiIAQAAAAAAAAAAKIICCERASEAAAAAAAAAABBFQAiJCAgBAAAAAAAAAIAoAkJIREAIAAAAAAAAAABEERBCIgJCAAAAAAAAAAAgioAQEhEQAgAAAAAAAAAAUQSEkIiAEAAAAAAAAAAAiCIghEQEhAAAAAAAAAAAQBQBISQiIAQAAAAAAAAAAKIICCERASEAAAAAAAAAABBFQAiJCAgBAAAAAAAAAIAoAkJIREAIAAAAAAAAAABEERBCIgJCAAAAAAAAAAAgioAQEhEQAgAAAAAAAAAAUQSEkIiAEAAAAAAAAAAAiCIghEQEhAAAAAAAAAAAQBQBISQiIAQAAAAAAAAAAKIICCERASEAAAAAAAAAABBFQAiJCAgBAAAAAAAAAIAoAkJIREAIAAAAAAAAAABEERBCIgJCAAAAAAAAAAAgioAQEhEQAgAAAAAAAAAAUQSEkIiAEAAAAAAAAAAAiCIghEQEhAAAAAAAAAAAQBQBISQiIAQAAAAAAAAAAKIICCERASEAAAAAAAAAABBFQAiJCAgBAAAAAAAAAIAoAkJIREAIAAAAAAAAAABEERBCIgJCAAAAAAAAAAAgioAQEhEQAgAAAAAAAAAAUQSEkIiAEAAAAAAAAAAAiCIghEQEhAAAAAAAAAAAQBQBISQiIAQAAAAAAAAAAKIICCERASEAAAAAAAAAABBFQAiJCAgBAAAAAAAAAIAoAkJIREAIAAAAAAAAAABEERBCIgJCAAAAAAAAAAAgioAQEhEQAgAAAAAAAAAAUQSEkIiAEAAAAAAAAAAAiCIghEQEhAAAAAAAAAAAQBQBISQiIAQAAAAAAAAAAKIICCERASEAAAAAAAAAABBFQAiJCAgBAAAAAAAAAIAoAkJIREAIAAAAAAAAAABEERBCIgJCAAAAAAAAAAAgioAQEhEQAgAAAAAAAAAAUQSEkIiAEAAAAAAAAAAAiCIghEQEhAAAAAAAAAAAQBQBISQiIAQAAAAAAAAAAKIICCERASEAAAAAAAAAABBFQAiJCAgBAAAAAAAAAIAoAkJIREAIAAAAAAAAAABEERBCIgJCAAAAAAAAAAAgioAQEhEQAgAAAAAAAAAAUQSEkIiAEAAAAAAAAAAAiCIghEQEhAAAAAAAAAAAQBQBISQiIAQAAAAAAAAAAKIICCERASEAAAAAAAAAABBFQAiJCAgBAAAAAAAAAIAoAkJIREAIAAAAAAAAAABEERBCIgJCAAAAAAAAAAAgioAQEhEQAgAAAAAAAAAAUQSEkIiAEAAAAAAAAAAAiCIghEQEhAAAAAAAAAAAQBQBISQiIAQAAAAAAAAAAKIICCERASEAAAAAAAAAABBFQAiJCAgBAAAAAAAAAIAoAkJIREAIAAAAAAAAAABEERBCIgJCAAAAAAAAAAAgioAQEhEQAgAAAAAAAAAAUQSEkIiAEAAAAAAAAAAAiCIghEQEhAAAAAAAAAAAQBQBISQiIAQAAAAAAAAAAKIICCERASEAAAAAAAAAABBFQAiJCAgBAAAAAAAAAIAoAkJIREAIAAAAAAAAAABEERBCIgJCAAAAAAAAAAAgioAQEhEQAgAAAAAAAAAAUQSEkIiAEAAAAAAAAAAAiCIghEQEhAAAAAAAAAAAQBQBISQiIAQAAAAAAAAAAKIICCERASEAAAAAAAAAABBFQAiJCAgBAAAAAAAAAIAoAkJIREAIAAAAAAAAAABEERBCIgJCAAAAAAAAAAAgioAQEhEQAgAAAAAAAAAAUQSEkIiAEAAAAAAAAAAAiCIghEQEhAAAAAAAAAAAQBQBISQiIAQAAAAAAAAAAKIICCERASEAAAAAAAAAABBFQAiJCAgBAAAAAAAAAIAoAkJIREAIAAAAAAAAAABEERBCIgJCAAAAAAAAAAAgioAQEhEQAgAAAAAAAAAAUQSEkIiAEAAAAAAAAAAAiCIghEQEhAAAAAAAAAAAQBQBISQiIAQAAAAAAAAAAKIICCERASEAAAAAAAAAABBFQAiJCAgBAAAAAAAAAIAoAkJIREAIAAAAAAAAAABEERBCIgJCAAAAAAAAAAAgioAQEhEQAgAAAAAAAAAAUQSEkIiAEAAAAAAAAAAAiCIghEQEhAAAAAAAAAAAQBQBISQiIAQAAAAAAAAAAKIICCERASEAAAAAAAAAABBFQAiJCAgBAAAAAAAAAIAoAkJIREAIAAAAAAAAAABEERBCIgJCAAAAAAAAAAAgioAQEhEQAgAAAAAAAAAAUQSEkIiAEAAAAAAAAAAAiCIghEQEhAAAAAAAAAAAQBQBISQiIAQAAAAAAAAAAKIICCERASEAAAAAAAAAABBFQAiJCAgBAAAAAAAAAIAoAkJIREAIAAAAAAAAAABEERBCIgJCAAAAAAAAAAAgioAQEhEQAgAAAAAAAAAAUQSEkIiAEAAAAAAAAAAAiCIghEQEhAAAAAAAAAAAQBQBISQiIAQAAAAAAAAAAKIICCERASEAAAAAAAAAABBFQAiJCAgBAAAAAAAAAIAoAkJIREAIAAAAAAAAAABEERBCIgJCAAAAAAAAAAAgioAQEhEQAgAAAAAAAAAAUQSEkIiAEAAAAAAAAAAAiCIghEQEhAAAAAAAAAAAQBQBISQiIAQAAAAAAAAAAKIICCERASEAAAAAAAAAABBFQAiJCAgBAAAAAAAAAIAoAkJIREAIAAAAAAAAAABEERBCIgJCAAAAAAAAAAAgioAQEhEQAgAAAAAAAAAAUQSEkIiAEAAAAAAAAAAAiCIghEQEhAAAAAAAAAAAQBQBISQiIAQAAAAAAAAAAKIICCERASEAAAAAAAAAABBFQAiJCAgBAAAAAAAAAIAoAkJIREAIAAAAAAAAAABEERBCIgJCAAAAAAAAAAAgioAQEhEQAgAAAAAAAAAAUQSEkIiAEAAAAAAAAAAAiCIghEQEhAAAAAAAAAAAQBQBISQiIAQAAAAAAAAAAKIICCERASEAAAAAAAAAABBFQAiJCAgBAAAAAAAAAIAoAkJIREAIAAAAAAAAAABEERBCIgJCAAAAAAAAAAAgioAQEhEQAgAAAAAAAAAAUQSEkIiAEAAAAAAAAAAAiCIghEQEhAAAAAAAAAAAQBQBISQiIAQAAAAAAAAAAKIICCERASEAAAAAAAAAABBFQAiJCAgBAAAAAAAAAIAoAkJIREAIAAAAAAAAAABEERBCIgJCAAAAAAAAAAAgioAQEhEQAgAAAAAAAAAAUQSEkIiAEAAAAAAAAAAAiCIghEQEhAAAAAAAAAAAQBQBISQiIAQAAAAAAAAAAKIICCERASEAAAAAAAAAABBFQAiJCAgBAAAAAAAAAIAoAkJIREAIAAAAAAAAAABEERBCIgJCAAAAAAAAAAAgioAQEhEQAgAAAAAAAAAAUQSEkIiAEAAAAAAAAAAAiCIghEQEhAAAAAAAAAAAQBQBISQiIAQAAAAAAAAAAKIICCERASEAAAAAAAAAABBFQAiJCAgBAAAAAAAAAIAoAkJIREAIAAAAAAAAAABEERBCIgJCAAAAAAAAAAAgioAQEhEQAgAAAAAAAAAAUQSEkIiAEAAAAAAAAAAAiCIghEQEhAAAAAAAAAAAQBQBISQiIAQAAAAAAAAAAKIICCERASEAAAAAAAAAABBFQAiJCAgBAAAAAAAAAIAoAkJIREAIAAAAAAAAAABEERBCIgJCAAAAAAAAAAAgioAQEhEQAgAAAAAAAAAAUQSEkIiAEAAAAAAAAAAAiCIghEQEhAAAAAAAAAAAQBQBISQiIAQAAAAAAAAAAKIICCERASEAAAAAAAAAABBFQAiJCAgBAAAAAAAAAIAoAkJIREAIAAAAAAAAAABEERBCIgJCAAAAAAAAAAAgioAQEhEQAgAAAAAAAAAAUQSEkIiAEAAAAAAAAAAAiCIghEQEhAAAAAAAAAAAQBQBISQiIAQAAAAAAAAAAKIICCERASEAAAAAAAAAABBFQAiJCAgBAAAAAAAAAIAoAkJIREAIAAAAAAAAAABEERBCIgJCAAAAAAAAAAAgioAQEhEQAgAAAAAAAAAAUQSEkIiAEAAAAAAAAAAAiCIghEQEhAAAAAAAAAAAQBQBISQiIAQAAAAAAAAAAKIICCERASEAAAAAAAAAABBFQAiJCAgBAAAAAAAAAIAoAkJIREAIAAAAAAAAAABEERBCIgJCAAAAAAAAAAAgioAQEhEQAgAAAAAAAAAAUQSEkIiAEAAAAAAAAAAAiCIghEQEhAAAAAAAAAAAQBQBISQiIAQAAAAAAAAAAKIICCERASEAAAAAAAAAABBFQAiJCAgBAAAAAAAAAIAoAkJIREAIAAAAAAAAAABEERBCIgJCAAAAAAAAAAAgioAQEhEQAgAAAAAAAAAAUQSEkIiAEAAAAAAAAAAAiCIghEQEhAAAAAAAAAAAQBQBISQiIAQAAAAAAAAAAKIICCERASEAAAAAAAAAABBFQAiJCAgBAAAAAAAAAIAoAkJIREAIAAAAAAAAAABEERBCIgJCAAAAAAAAAAAgioAQEhEQAgAAAAAAAAAAUQSEkIiAEAAAAAAAAAAAiCIghEQEhAAAAAAAAAAAQBQBISQiIAQAAAAAAAAAAKIICCERASEAAAAAAAAAABBFQAiJCAgBAAAAAAAAAIAoAkJIREAIAAAAAAAAAABEERBCIgJCAAAAAAAAAAAgioAQEhEQAgAAAAAAAAAAUQSEkIiAEAAAAAAAAAAAiCIghEQEhAAAAAAAAAAAQBQBISQiIAQAAAAAAAAAAKIICCERASEAAAAAAAAAABBFQAiJCAgBAAAAAAAAAIAoAkJIREAIAAAAAAAAAABEERBCIgJCAAAAAAAAAAAgioAQEhEQAgAAAAAAAAAAUQSEkIiAEAAAAAAAAAAAiCIghEQEhAAAAAAAAAAAQBQBISQiIAQAAAAAAAAAAKIICCERASEAAAAAAAAAABBFQAiJCAgBAAAAAAAAAIAoAkJIREAIAAAAAAAAAABEERBCIgJCAAAAAAAAAAAgioAQEhEQAgAAAAAAAAAAUQSEkIiAEAAAAAAAAAAAiCIghEQEhAAAAAAAAAAAQBQBISQiIAQAAAAAAAAAAKIICCERASEAAAAAAAAAABBFQAiJCAgBAAAAAAAAAIAoAkJIREAIAAAAAAAAAABEERBCIgJCAAAAAAAAAAAgioAQEhEQAgAAAAAAAAAAUQSEkIiAEAAAAAAAAAAAiCIghEQEhAAAAAAAAAAAQBQBISQiIAQAAAAAAAAAAKIICCERASEAAAAAAAAAABBFQAiJCAgBAAAAAAAAAIAoAkJIREAIAAAAAAAAAABEERBCIgJCAAAAAAAAAAAgioAQEhEQAgAAAAAAAAAAUQSEkIiAEAAAAAAAAAAAiCIghEQEhAAAAAAAAAAAQBQBISQiIAQAAAAAAAAAAKIICCERASEAAAAAAAAAABBFQAiJCAgBAAAAAAAAAIAoAkJIREAIAAAAAAAAAABEERBCIgJCAAAAAAAAAAAgioAQEhEQAgAAAAAAAAAAUQSEkIiAEAAAAAAAAAAAiCIghEQEhAAAAAAAAAAAQBQBISQiIAQAAAAAAAAAAKIICCERASEAAAAAAAAAABBFQAiJCAgBAAAAAAAAAIAoAkJIREAIAAAAAAAAAABEERBCIgJCAAAAAAAAAAAgioAQEhEQAgAAAAAAAAAAUQSEkIiAEAAAAAAAAAAAiCIghEQEhAAAAAAAAAAAQBQBISQiIAQAAAAAAAAAAKIICCERASEAAAAAAAAAABBFQAiJCAgBAAAAAAAAAIAoAkJIREAIAAAAAAAAAABEERBCIgJCAAAAAAAAAAAgioAQEhEQAgAAAAAAAAAAUQSEkIiAEAAAAAAAAAAAiCIghEQEhAAAAAAAAAAAQBQBISQiIAQAAAAAAAAAAKIICCERASEAAAAAAAAAABBFQAiJCAgBAAAAAAAAAIAoAkJIREAIAAAAAAAAAABEERBCIgJCAAAAAAAAAAAgioAQEhEQAgAAAAAAAAAAUQSEkIiAEAAAAAAAAAAAiCIghEQEhAAAAAAAAAAAQBQBISQiIAQAAAAAAAAAAKIICCERASEAAAAAAAAAABBFQAiJCAgBAAAAAAAAAIAoAkJIREAIAAAAAAAAAABEERBCIgJCAAAAAAAAAAAgioAQEhEQAgAAAAAAAAAAUQSEkIiAEAAAAAAAAAAAiCIghEQEhAAAAAAAAAAAQBQBISQiIAQAAAAAAAAAAKIICCERASEAAAAAAAAAABBFQAiJCAgBAAAAAAAAAIAoAkJIREAIAAAAAAAAAABEERBCIgJCAAAAAAAAAAAgioAQEhEQAgAAAAAAAAAAUQSEkIiAEAAAAAAAAAAAiCIghEQEhAAAAAAAAAAAQBQBISQiIAQAAAAAAAAAAKIICCERASEAAAAAAAAAABBFQAiJCAgBAAAAAAAAAIAoAkJIREAIAAAAAAAAAABEERBCIgJCAAAAAAAAAAAgioAQEhEQAgAAAAAAAAAAUQSEkIiAEAAAAAAAAAAAiCIghEQEhAAAAAAAAAAAQBQBISQiIAQAAAAAAAAAAKIICCERASEAAAAAAAAAABBFQAiJCAgBAAAAAAAAAIAoAkJIREAIAAAAAAAAAABEERBCIgJCAAAAAAAAAAAgioAQEhEQAgAAAAAAAAAAUQSEkIiAEAAAAAAAAAAAiCIghEQEhAAAAAAAAAAAQBQBISQiIAQAAAAAAAAAAKIICCERASEAAAAAAAAAABBFQAiJCAgBAAAAAAAAAIAoAkJIREAIAAAAAAAAAABEERBCIgJCAAAAAAAAAAAgioAQEhEQAgAAAAAAAAAAUQSEkIiAEAAAAAAAAAAAiCIghEQEhAAAAAAAAAAAQBQBISQiIAQAAAAAAAAAAKIICCERASEAAAAAAAAAABBFQAiJCAgBAAAAAAAAAIAoAkJIREAIAAAAAAAAAABEERBCIgJCAAAAAAAAAAAgioAQEhEQAgAAAAAAAAAAUQSEkIiAEAAAAAAAAAAAiCIghEQEhAAAAAAAAAAAQBQBISQiIAQAAAAAAAAAAKIICCERASEAAAAAAAAAABBFQAiJCAgBAAAAAAAAAIAoAkJIREAIAAAAAAAAAABEERBCIgJCAAAAAAAAAAAgioAQEhEQAgAAAAAAAAAAUQSEkIiAEAAAAAAAAAAAiCIghEQEhAAAAAAAAAAAQBQBISQiIAQAAAAAAAAAAKIICCERASEAAAAAAAAAABBFQAiJCAgBAAAAAAAAAIAoAkJIREAIAAAAAAAAAABEERBCIgJCAAAAAAAAAAAgioAQEhEQAgAAAAAAAAAAUQSEkIiAEAAAAAAAAAAAiCIghEQEhAAAAAAAAAAAQBQBISQiIAQAAAAAAAAAAKIICCERASEAAAAAAAAAABBFQAiJCAgBAAAAAAAAAIAoAkJIREAIAAAAAAAAAABEERBCIgJCAAAAAAAAAAAgioAQEhEQAgAAAAAAAAAAUQSEkIiAEAAAAAAAAAAAiCIghEQEhAAAAAAAAAAAQBQBISQiIAQAAAAAAAAAAKIICCERASEAAAAAAAAAABBFQAiJCAgBAAAAAAAAAIAoAkJIREAIAAAAAAAAAABEERBCIgJCAAAAAAAAAAAgioAQEhEQAgAAAAAAAAAAUQSEkIiAEAAAAAAAAAAAiCIghEQEhAAAAAAAAAAAQBQBISQiIAQAAAAAAAAAAKIICCERASEAAAAAAAAAABBFQAiJCAgBAAAAAAAAAIAoAkJIREAIAAAAAAAAAABEERBCIgJCAAAAAAAAAAAgioAQEhEQAgAAAAAAAAAAUQSEkIiAEAAAAAAAAAAAiCIghEQEhAAAAAAAAAAAQBQBISQiIAQAAAAAAAAAAKIICCERASEAAAAAAAAAABBFQAiJCAgBAAAAAAAAAIAoAkJIREAIAAAAAAAAAABEERBCIgJCAAAAAAAAAAAgioAQEhEQAgAAAAAAAAAAUQSEkIiAEAAAAAAAAAAAiCIghEQEhAAAAAAAAAAAQBQBISQiIAQAAAAAAAAAAKIICCERASEAAAAAAAAAABBFQAiJCAgBAAAAAAAAAIAoAkJIREAIAAAAAAAAAABEERBCIgJCAAAAAAAAAAAgioAQEhEQAgAAAAAAAAAAUQSEkIiAEAAAAAAAAAAAiCIghEQEhAAAAAAAAAAAQBQBISQiIAQAAAAAAAAAAKIICCERASEAAAAAAAAAABBFQAiJCAgBAAAAAAAAAIAoAkJIREAIAAAAAAAAAABEERBCIgJCAAAAAAAAAAAgioAQEhEQAgAAAAAAAAAAUQSEkIiAEAAAAAAAAAAAiCIghEQEhAAAAAAAAAAAQBQBISQiIAQAAAAAAAAAAKIICCERASEAAAAAAAAAABBFQAiJCAgBAAAAAAAAAIAoAkJIREAIAAAAAAAAAABEERBCIgJCAAAAAAAAAAAgioAQEhEQAgAAAAAAAAAAUQSEkIiAEAAAAAAAAAAAiCIghEQEhAAAAAAAAAAAQBQBISQiIAQAAAAAAAAAAKIICCERASEAAAAAAAAAABBFQAiJCAgBAAAAAAAAAIAoAkJIREAIAAAAAAAAAABEERBCIgJCAAAAAAAAAAAgioAQEhEQAgAAAAAAAAAAUQSEkIiAEAAAAAAAAAAAiCIghEQEhAAAAAAAAAAAQBQBISQiIAQAAAAAAAAAAKIICCERASEAAAAAAAAAABBFQAiJCAgBAAAAAAAAAIAoAkJIREAIAAAAAAAAAABEERBCIgJCAAAAAAAAAAAgioAQEhEQAgAAAAAAAAAAUQSEkIiAEAAAAAAAAAAAiCIghEQEhAAAAAAAAAAAQBQBISQiIAQAAAAAAAAAAKIICCERASEAAAAAAAAAABBFQAiJCAgBAAAAAAAAAIAoAkJIREAIAAAAAAAAAABEERBCIgJCAAAAAAAAAAAgioAQEhEQAgAAAAAAAAAAUQSEkIiAEAAAAAAAAAAAiCIghEQEhAAAAAAAAAAAQBQBISQiIAQAAAAAAAAAAKIICCERASEAAAAAAAAAABBFQAiJCAgBAAAAAAAAAIAoAkJIREAIAAAAAAAAAABEERBCIgJCAAAAAAAAAAAgioAQEhEQAgAAAAAAAAAAUQSEkIiAEAAAAAAAAAAAiCIghEQEhAAAAAAAAAAAQBQBISQiIAQAAAAAAAAAAKIICCERASEAAAAAAAAAABBFQAiJCAgBAAAAAAAAAIAoAkJIREAIAAAAAAAAAABEERBCIgJCAAAAAAAAAAAgioAQEhEQAgAAAAAAAAAAUQSEkIiAEAAAAAAAAAAAiCIghEQEhAAAAAAAAAAAQBQBISQiIAQAAAAAAAAAAKIICCERASEAAAAAAAAAABBFQAiJCAgBAAAAAAAAAIAoAkJIREAIAAAAAAAAAABEERBCIgJCAAAAAAAAAAAgioAQEhEQAgAAAAAAAAAAUQSEkIiAEAAAAAAAAAAAiCIghEQEhAAAAAAAAAAAQBQBISQiIAQAAAAAAAAAAKIICCERASEAAAAAAAAAABBFQAiJCAgBAAAAAAAAAIAoAkJIREAIAAAAAAAAAABEERBCIgJCAAAAAAAAAAAgioAQEhEQAgAAAAAAAAAAUQSEkIiAEAAAAAAAAAAAiCIghEQEhAAAAAAAAAAAQBQBISQiIAQAAAAAAAAAAKIICCERASEAAAAAAAAAABBFQAiJCAgBAAAAAAAAAIAoAkJIREAIAAAAAAAAAABEERBCIgJCAAAAAAAAAAAgioAQEhEQAgAAAAAAAAAAUQSEkIiAEAAAAAAAAAAAiCIghEQEhAAAAAAAAAAAQBQBISQiIAQAAAAAAAAAAKIICCERASEAAAAAAAAAABBFQAiJCAgBAAAAAAAAAIAoAkJIREAIAAAAAAAAAABEERBCIgJCAAAAAAAAAAAgioAQEhEQAgAAAAAAAAAAUQSEkIiAEAAAAAAAAAAAiCIghEQEhAAAAAAAAAAAQBQBISQiIAQAAAAAAAAAAKIICCERASEAAAAAAAAAABBFQAiJCAgBAAAAAAAAAIAoAkJIREAIAAAAAAAAAABEERBCIgJCAAAAAAAAAAAgioAQEhEQAgAAAAAAAAAAUQSEkIiAEAAAAAAAAAAAiCIghEQEhAAAAAAAAAAAQBQBISQiIAQAAAAAAAAAAKIICCERASEAAAAAAAAAABBFQAiJCAgBAAAAAAAAAIAoAkJIREAIAAAAAAAAAABEERBCIgJCAAAAAAAAAAAgioAQEhEQAgAAAAAAAAAAUQSEkIiAEAAAAAAAAAAAiCIghEQEhAAAAAAAAAAAQBQBISQiIAQAAAAAAAAAAKIICCERASEAAAAAAAAAABBFQAiJCAgBAAAAAAAAAIAoAkJIREAIAAAAAAAAAABEERBCIgJCAAAAAAAAAAAgioAQEhEQAgAAAAAAAAAAUQSEkIiAEAAAAAAAAAAAiCIghEQEhAAAAAAAAAAAQBQBISQiIAQAAAAAAAAAAKIICCERASEAAAAAAAAAABBFQAiJCAgBAAAAAAAAAIAoAkJIREAIAAAAAAAAAABEERBCIgJCAAAAAAAAAAAgioAQEhEQAgAAAAAAAAAAUQSEkIiAEAAAAAAAAAAAiCIghEQEhAAAAAAAAAAAQBQBISQiIAQAAAAAAAAAAKIICCERASEAAAAAAAAAABBFQAiJCAgBAAAAAAAAAIAoAkJIREAIAAAAAAAAAABEERBCIgJCAAAAAAAAAAAgioAQEhEQAgAAAAAAAAAAUQSEkIiAEAAAAAAAAAAAiCIghEQEhAAAAAAAAAAAQBQBISQiIAQAAAAAAAAAAKIICCERASEAAAAAAAAAABBFQAiJCAgBAAAAAAAAAIAoAkJIREAIAAAAAAAAAABEERBCIgJCAAAAAAAAAAAgioAQEhEQAgAAAAAAAAAAUQSEkIiAEAAAAAAAAAAAiCIghEQEhAAAAAAAAAAAQBQBISQiIAQAAAAAAAAAAKKkCAhPTp6cvvC1N6dnnv7y9MyLb04vrLwyfeEzJ1vbPXW/rntzeuFrz0+fPlmv//QXX5leuP/l2bhl++e++ORsObfPycmfTv/lb/55+ofTtTce/OlsmyUnT780vXD/+dUzWJ6ti+dw+xlcev72Pb8X6y/GWh2zGaMSEAIAAAAAAAAAAFFSBYRtdNVHgat4a+HzUoxVtmmjLW6nPh48NiJcPT+rcPDkPBIsz+F29Lfz+dvz/AoIAQAAAAAAAACAT0KqgHApsDo5KW92234b3Mlnnp+ee/Gl6amyvvz7fNsSbpW3Do7G5HY6+ey3pje6eHDlb741/bsu0Btpn7Ua/tXnZ/0s7Xn+Bs/a9vO7e307FwEhAAAAAAAAAAAQ5XYEhKtYq/n52O5nYteBV4m5npy+cP+l6Zn7Zb8y5vxnkLl9rj0g3Pv87Xl+96xv5yIgBAAAAAAAAAAAotyOgHDwBrjt/c8Dws88Pz3zxSenp+6XbWtUON6H2yPkJ4x3BYR7n799z+/u9e1YAkIAAAAAAAAAACDKrQgIy+en7r+5Crv6fS/2f2V65v4rqzHKvs/df2nzs8b99tw+fUR4aDy42ndPQFi22f/8Hf78bt5oOHg+BYQAAAAAAAAAAECUWxMQ1m22fkK2CbpWgdb5GwfXb4xbDr6gdUhAuOv5O+j53foZ5PXbMkeBq4AQAAAAAAAAAACIkiIgBNYEhAAAAAAAAAAAQBQBISQiIAQAAAAAAAAAAKIICCERASEAAAAAAAAAABBFQAiJCAgBAAAAAAAAAIAoAkJIREAIAAAAAAAAAABEERBCIgJCAAAAAAAAAAAgioAQEhEQAgAAAAAAAAAAUQSEkIiAEAAAAAAAAAAAiCIghEQEhAAAAAAAAAAAQBQBISQiIAQAAAAAAAAAAKIICCERASEAAAAAAAAAABDlRgSE//pzn58+Cwx8bvpXJyebL6yAEAAAAAAAAAAAiHIjAsJ+UsCYgBAAAAAAAAAAAIgiIIREBIQAAAAAAAAAAEAUASEkIiAEAAAAAAAAAACiCAghEQEhAAAAAAAAAAAQRUAIiQgIAQAAAAAAAACAKAJCSERACAAAAAAAAAAARBEQQiICQgAAAAAAAAAAIIqAEBIREAIAAAAAAPz/9u4fR46igcPwCfYIBOQ4ckiKBAdAxAhuQOJbcApnIPkSnIKQHHGE+TRr1p6dmV2Dvtd/fssTPNJ2dXWP5arwVTUAAFAREMIQASEAAAAAAAAAAFAREMIQASEAAAAAAAAAAFAREMIn6Ob5i8MPP35/+Ozm5t64gBAAAAAAAAAAAKgICP+FZ9++PHz31RcX41ATEAIAAAAAAAAAAO+bgPBfEBDyoQgIAQAAAAAAAACA920qIDwGfD/8dOfF4dlJXHVz88Xhyx9P77/2zfO3c+49fxJn3T37zfOvD9+8efbnw5efv77/2Vc/X7z31rdfP/r7p7/N+3Xt//90DY5reIw/T9fyNAa9fP7t/nq7P07220ng9679c+eh/Xf1/gNzBIQAAAAAAAAAAEBlJiA8hl8XMeBJYHV7/XfQdxd0nQZip/fPr9/GY2fR4Mn8u2ceOoHw2nw+nGvrebpWb8LBu+jv8+8P3/293g/OvwgEHw8Iz4PFh/bnP7l2AiEAAAAAAAAAAPC+zQSE564FXKeB12nQd3NzPBnu/olwrwOy16fMXXv+WsD1zoDw7FREPoxr63cedJ4Hfad74nQvvH3nyf0r73/X/rv//Lv235X7V/bfkYAQAAAAAAAAAACozASEr4Orhz/x+tgJdFefPfnM7NUA7ErA9VhAeHTvU8dOI/ygHlv/o/Og8NS1tT7dE+/aH1fvXwSK53vvZP9dCxiv/JuOBIQAAAAAAAAAAEBlIiC8FoSdB1a3AdlpnHX6OdgrJ7xde/9Dgdjd2LsCwvP3PRSs0Xts/Y8eDQivBXz/7wmE7zhh8F2/f35i4h0BIQAAAAAAAAAAUBkJCI8B1ttA6+76bcB1vH7888GnJ9SduxqAXQkIH4q6rnksWKP1T9b/sfW4Fqje7pfzQPXuhMO7EwUfCQjP99v59WO/f7v3Tt5/OldACAAAAAAAAAAAVCYCwqM3UdXdp1+ff3/47iSwuvf54Cun0L05FfDK/WsB2LWA8OIdZ8/fe/eV+Iv3513r/1hAePQmSn1g/e5/hvjF4dnx+iwgfOi3X7//8Tn33n9875X9dyQgBAAAAAAAAAAAKjMB4WNex1f3PxF7fmohT9fHXv9rAer7IiAEAAAAAAAAAAAqTyMgvD2d8CwguxKV8TR97PUXEAIAAAAAAAAAAIueREB4dPkJ2w8Tj/Fp+JjrLyAEAAAAAAAAAAAWPZmAEP4LBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAhDBIQAAAAAAAAAAEBFQAifiJvnLw4//Pj94bObm8PNzdeHb376+fDl5zf35ggIAQAAAAAAAACAioAQPgHnweCzb18efvj264t5AkIAAAAAAAAAAKAiIISP7Obmi8OXP748fPfVF7fXn33185uTCM/nCggBAAAAAAAAAICKgBA+AccTB+8CwttPGf/04vBMQAgAAAAAAAAAALxHAkL4BPiEMQAAAAAAAAAA8KEJCOETcXvy4N+fLj4PCu8ICAEAAAAAAAAAgIqAEIYICAEAAAAAAAAAgIqAEIYICAEAAAAAAAAAgIqAEIYICAEAAAAAAAAAgMp5QPjXX38dXr16dXj58uVVx3vHOQJC+AgEhAAAAAAAAAAAQOVaQPjrr79ehIN3jvcEhAAAAAAAAAAAADDuPCA8+v333y/CwTvHe+fzz3vAKy4GBIQAAAAAAAAAAADwEV0LCI9+++23i3jwOHY+T0AIAAAAAAAAAAAAgx4KCP/888/Dq1ev3sSDx7+PY+fzBIQAAAAAAAAAAAAw6KGA8OiPP/44/PLLL7eOf5/fFxACAAAAAAAAAADAqMcCwn/qvAe84mJAQAgAAAAAAAAAAAAfkYAQAAAAAAAAAAAA/oMEhAAAAAAAAAAAAPAfJCAEAAAAAAAAAACA/6BPIiAEAAAAAAAAAAAAnqSLAQAAAAAAAAAAAODpuxgAAAAAAAAAAAAAnr6LAQAAAAAAAAAAAODpuxgAAAAAAAAAAAAAnr6LAQAAAAAAAAAAAODpuxgAAAAAAAAAAAAAnr6LAQAAAAAAAAAAAOCJ+x8Jb/1vSWJawwAAAABJRU5ErkJggg=="}, {"name": "report.md", "type": "text", "content": "# HerdrPlus Window Management \u2014 Execution Report\n\nDate: 2026-07-19, ~13:00\u201313:05 local\nBinary: `K:\\Downloads\\__Projects.Mine\\herdr4Windows\\__solutions\\target\\release\\herdrplus.exe` (v0.7.4, protocol 19)\nMachine: Windows 11 Pro 10.0.26200, unattended run\n\n## Background: client/server design\n\nPer `__references/herdr/src/server/autodetect.rs` (`auto_detect_launch`), running `herdrplus`\nwith no arguments spawns a fully detached `herdrplus server` daemon process, waits for its\nsocket, then attaches the TUI as a thin client. Closing the client window must therefore leave\nthe server running \u2014 that is the behavior under test.\n\n## Phase 0 \u2014 Pre-state\n\n```\nGet-CimInstance Win32_Process -Filter \"Name like 'herdr%'\"   -> (no results)\n```\n\nNo herdr processes existed before the test. Clean baseline.\n\n## Phase 1 \u2014 Open the window, maximized, and verify\n\nLaunch (classic console host so `-WindowStyle Maximized` is honored):\n\n```powershell\nStart-Process -FilePath conhost.exe -ArgumentList '\"...\\herdrplus.exe\"' -WindowStyle Maximized -PassThru\n```\n\nProcess evidence (6 s after launch) \u2014 client attached in the window, detached server spawned:\n\n```\nProcessId : 22100  ParentProcessId : 29676 (conhost)   CommandLine : ...\\herdrplus.exe            <- TUI client\nProcessId : 29204  ParentProcessId : 22100             CommandLine : \"...\\herdrplus.exe\" server   <- detached server daemon\n```\n\nWindow evidence (Win32, on hwnd `1119016`, class `ConsoleWindowClass`, owned by client PID 22100):\n\n- `IsWindowVisible` = **True**\n- `IsZoomed` (maximized) = **True** (set by the launch flag; re-asserted with `ShowWindow SW_MAXIMIZE`)\n- `GetWindowRect` = L=-8 T=-8 R=1928 B=1040 on a 1920x1080 primary display \u2014 the classic\n  maximized geometry (work area + invisible 8 px borders)\n- `DWMWA_CLOAKED` = 0 (not cloaked; genuinely on the visible desktop)\n- `GetForegroundWindow` = `1119016` after activation (matches target)\n\nVisual evidence: `phase1-window-open-maximized.png` (captured with `PrintWindow`/`PW_RENDERFULLCONTENT`\ndirectly from the hwnd). It shows the HerdrPlus TUI fully rendered in the maximized window:\n\"spaces\" sidebar with workspace `herdr4Windows` / branch `main`, tab strip, active pane running\nPowerShell at `K:\\Downloads\\__Projects.Mine\\herdr4Windows\\__references\\herdr>`, and the\n`new / menu / agents / grouped` footer controls.\n\nServer API evidence (over the herdr socket):\n\n```\n> herdrplus status server --json\n{\"status\":\"running\",\"running\":true,\"version\":\"0.7.4\",\"protocol\":19,\n \"capabilities\":{\"live_handoff\":false,\"detached_server_daemon\":true},\n \"compatible\":true,\"socket\":\"C:\\Users\\Tony Baloney\\AppData\\Roaming\\herdr\\herdr.sock\",\n \"session\":null,\"restart_needed\":false}\n```\n\n**Phase 1 verdict: window open, maximized, TUI rendering, server running.**\n\n## Phase 2 \u2014 Close only the window; verify the server survives\n\nClose: `PostMessage(hwnd 1119016, WM_CLOSE)` \u2014 window-level close only, no process was killed\ndirectly.\n\nState 4 s later:\n\n```\nclient PID 22100 alive: False        <- TUI client exited with its window\nconhost PID 29676 alive: False       <- console host gone\nserver PID 29204 alive: True         <- detached server SURVIVED\n\nProcessId : 29204   CommandLine : \"...\\herdrplus.exe\" server   (only herdr process remaining)\n\n> herdrplus status server --json\n{\"status\":\"running\",\"running\":true,\"version\":\"0.7.4\",\"protocol\":19,...}\n```\n\n**Phase 2 verdict: closing the window killed only the client; the server stayed alive and kept\nanswering API requests \u2014 the client/server design works as intended.**\n\n## Phase 3 \u2014 Full cleanup; nothing left in RAM\n\n```\n> herdrplus server stop\nexit code: 0\n```\n\nState 3 s later:\n\n```\nGet-CimInstance Win32_Process -Filter \"Name like 'herdr%'\"   -> NONE - no herdr processes remain in RAM\n\n> herdrplus status server --json\n{\"status\":\"not_running\",\"running\":false,\"version\":null,\"protocol\":null,...}\n```\n\n**Phase 3 verdict: server stopped cleanly via its own API; zero herdr/herdrplus processes\nremain. Final state identical to the Phase 0 baseline.**\n\n## Artifacts\n\n- `report.md` \u2014 this file\n- `phase1-window-open-maximized.png` \u2014 PrintWindow capture of the maximized HerdrPlus TUI\n\n## Notes\n\n- A full-desktop screenshot taken mid-run showed a Chrome window in the physical foreground even\n  though `GetForegroundWindow` reported the herdr hwnd; the `PrintWindow` capture of the hwnd\n  itself was used as the authoritative visual evidence since it renders the window's actual\n  contents regardless of z-order/monitor.\n- Window title reads `C:\\WINDOWS\\system32\\conhost.exe` because the TUI was hosted in a classic\n  conhost window (chosen deliberately so the maximize flag and WM_CLOSE targeting were reliable).\n"}], "grading": {"expectations": [{"text": "all three phases documented with evidence", "passed": true, "evidence": "phases 0-3 with Win32, CIM process, socket API evidence plus PrintWindow screenshot"}, {"text": "window verifiably opened (not fired blind)", "passed": true, "evidence": "conhost window hwnd 1119016 IsWindowVisible, IsZoomed:true, maximized rect, DWM not cloaked, screenshot of rendered TUI"}, {"text": "server still running after window close", "passed": true, "evidence": "WM_CLOSE; client 22100 exited, server 29204 survived and answered status server --json running:true"}, {"text": "full cleanup, zero herdr processes", "passed": true, "evidence": "herdrplus server stop exit 0; Win32_Process shows zero herdr processes; postcheck.json herdr_process_count=0"}, {"text": "did not block on interactive TUI", "passed": true, "evidence": "TUI launched in separate conhost window via Start-Process"}], "summary": {"failed": 0, "pass_rate": 1.0, "passed": 5, "total": 5}}}], "previous_feedback": {}, "previous_outputs": {}, "benchmark": {"metadata": {"skill_name": "herdrplus-coordinator", "skill_path": "<path/to/skill>", "executor_model": "<model-name>", "analyzer_model": "<model-name>", "timestamp": "2026-07-19T17:08:42Z", "evals_run": [0, 1, 2], "runs_per_configuration": 3}, "runs": [{"eval_id": 0, "configuration": "with_skill", "run_number": 1, "result": {"pass_rate": 1.0, "passed": 5, "failed": 0, "total": 5, "time_seconds": 187.7, "tokens": 53378, "tool_calls": 0, "errors": 0}, "expectations": [{"text": "report.md exists and documents start/stop/final process check with real evidence", "passed": true, "evidence": "report.md has baseline, RUNNING (session list ram1 running:true, status via ram1 socket), dry-run inventory, shutdown, and process-free sections with captured JSON"}, {"text": "named session ram1 actually started", "passed": true, "evidence": "session list --json shows ram1 running:true, PID 4192, 14MB; status --json via HERDR_SOCKET_PATH shows running, protocol 19"}, {"text": "default session never touched", "passed": true, "evidence": "report shows default running:false throughout; only ram1 stopped"}, {"text": "postcheck shows zero herdr processes", "passed": true, "evidence": "postcheck.json: herdr_process_count=0"}, {"text": "graceful-first shutdown", "passed": true, "evidence": "herdr-cleanup.ps1 -DryRun safety inventory first (live_agents:[]), then graceful cleanup: result clean, force_killed []"}], "notes": []}, {"eval_id": 1, "configuration": "with_skill", "run_number": 1, "result": {"pass_rate": 1.0, "passed": 5, "failed": 0, "total": 5, "time_seconds": 213.1, "tokens": 56209, "tool_calls": 0, "errors": 0}, "expectations": [{"text": "report lists three distinct real pane IDs from JSON", "passed": true, "evidence": "w1:p1/w1:p2/w1:p3 with terminal IDs term_656f97*"}, {"text": "captured ready-build/ready-test/ready-logs from correct panes", "passed": true, "evidence": "per-pane captured output blocks show each ready-* marker at the matching labeled pane"}, {"text": "panes labeled build/test/logs and balance invoked", "passed": true, "evidence": "labels in layout tree; pane balance --tab w1:t1 returned layout_balanced changed:true with equal-area ratios"}, {"text": "isolated grid1 session, not default", "passed": true, "evidence": "headless herdrplus --session grid1 server; commands aimed via HERDR_SOCKET_PATH; default not running throughout"}, {"text": "postcheck shows zero herdr processes", "passed": true, "evidence": "postcheck.json: herdr_process_count=0; session stopped+deleted"}], "notes": []}, {"eval_id": 2, "configuration": "with_skill", "run_number": 1, "result": {"pass_rate": 1.0, "passed": 5, "failed": 0, "total": 5, "time_seconds": 296.0, "tokens": 57011, "tool_calls": 0, "errors": 0}, "expectations": [{"text": "all three phases documented with evidence", "passed": true, "evidence": "phases open/verify/close-with-server-survival/cleanup each have JSON+process evidence"}, {"text": "window verifiably opened (not fired blind)", "passed": true, "evidence": "wt window found via WindowsTerminal PID 2124, title HerdrPlus[default], visible:true, then IsZoomed:true with full-desktop rect after ShowWindow fixup; script's FindWindowW-by-title false-failed (defect noted and since fixed)"}, {"text": "server still running after window close", "passed": true, "evidence": "WM_CLOSE to hwnd 266894; client exited, server PID 24208 stayed alive and answered status --json running:true"}, {"text": "full cleanup, zero herdr processes", "passed": true, "evidence": "herdr-cleanup.ps1 dry-run then real: default session stopped, 18.5MB freed, force_killed []; postcheck.json herdr_process_count=0, herdrplus_windows=0"}, {"text": "did not block on interactive TUI", "passed": true, "evidence": "TUI ran in separate wt window; agent shell never attached"}], "notes": []}, {"eval_id": 0, "configuration": "without_skill", "run_number": 1, "result": {"pass_rate": 1.0, "passed": 5, "failed": 0, "total": 5, "time_seconds": 358.3, "tokens": 58451, "tool_calls": 0, "errors": 0}, "expectations": [{"text": "report.md exists and documents start/stop/final process check with real evidence", "passed": true, "evidence": "report.md has baseline/running/stopped/process-free sections with captured JSON and process checks"}, {"text": "named session ram1 actually started", "passed": true, "evidence": "HERDR_SESSION=ram1 + herdrplus server headless; session list shows ram1 running:true, PID 21928"}, {"text": "default session never touched", "passed": true, "evidence": "default stayed running:false; never attached or stopped"}, {"text": "postcheck shows zero herdr processes", "passed": true, "evidence": "postcheck.json: herdr_process_count=0"}, {"text": "graceful-first shutdown", "passed": true, "evidence": "session stop ram1; hit misleading 15s timeout error, correctly re-verified instead of force-killing; documented the pitfall"}], "notes": []}, {"eval_id": 1, "configuration": "without_skill", "run_number": 1, "result": {"pass_rate": 1.0, "passed": 5, "failed": 0, "total": 5, "time_seconds": 190.4, "tokens": 52753, "tool_calls": 0, "errors": 0}, "expectations": [{"text": "report lists three distinct real pane IDs from JSON", "passed": true, "evidence": "w1:p1/w1:p2/w1:p3 with terminal IDs term_656f9a*"}, {"text": "captured ready-build/ready-test/ready-logs from correct panes", "passed": true, "evidence": "per-pane pane read captures show each ready-* marker; p3 re-read with recent-unwrapped to fix wrapping"}, {"text": "panes labeled build/test/logs and balance invoked", "passed": true, "evidence": "pane rename used; balance changed:true, ratio 0.5->0.3333, post-balance rects listed"}, {"text": "isolated grid1 session, not default", "passed": true, "evidence": "HERDR_SESSION=grid1 headless server; default verified not running before and after"}, {"text": "postcheck shows zero herdr processes", "passed": true, "evidence": "postcheck.json: herdr_process_count=0; grid1 stopped, deleted, dir gone"}], "notes": []}, {"eval_id": 2, "configuration": "without_skill", "run_number": 1, "result": {"pass_rate": 1.0, "passed": 5, "failed": 0, "total": 5, "time_seconds": 385.8, "tokens": 76383, "tool_calls": 0, "errors": 0}, "expectations": [{"text": "all three phases documented with evidence", "passed": true, "evidence": "phases 0-3 with Win32, CIM process, socket API evidence plus PrintWindow screenshot"}, {"text": "window verifiably opened (not fired blind)", "passed": true, "evidence": "conhost window hwnd 1119016 IsWindowVisible, IsZoomed:true, maximized rect, DWM not cloaked, screenshot of rendered TUI"}, {"text": "server still running after window close", "passed": true, "evidence": "WM_CLOSE; client 22100 exited, server 29204 survived and answered status server --json running:true"}, {"text": "full cleanup, zero herdr processes", "passed": true, "evidence": "herdrplus server stop exit 0; Win32_Process shows zero herdr processes; postcheck.json herdr_process_count=0"}, {"text": "did not block on interactive TUI", "passed": true, "evidence": "TUI launched in separate conhost window via Start-Process"}], "notes": []}], "run_summary": {"with_skill": {"pass_rate": {"mean": 1.0, "stddev": 0.0, "min": 1.0, "max": 1.0}, "time_seconds": {"mean": 232.2667, "stddev": 56.6369, "min": 187.7, "max": 296.0}, "tokens": {"mean": 55532.6667, "stddev": 1908.597, "min": 53378, "max": 57011}}, "without_skill": {"pass_rate": {"mean": 1.0, "stddev": 0.0, "min": 1.0, "max": 1.0}, "time_seconds": {"mean": 311.5, "stddev": 105.7732, "min": 190.4, "max": 385.8}, "tokens": {"mean": 62529.0, "stddev": 12331.5363, "min": 52753, "max": 76383}}, "delta": {"pass_rate": "+0.00", "time_seconds": "-79.2", "tokens": "-6996"}}, "notes": ["Pass rate ties at 100% both configs - the assertions do not discriminate: the model is already competent with herdr's discoverable CLI (--help + JSON output). Skill value shows in speed, tokens, and safety behavior instead.", "Time per eval (with vs without): session-lifecycle 188s vs 358s (48% faster with skill); pane-grid 213s vs 190s (baseline marginally faster); window-management 296s vs 386s (23% faster). Mean delta -79s, -7k tokens.", "SAFETY (not captured by assertions): the baseline window-management run attached to and stopped the DEFAULT session server with no live-agent check - on a machine with live agents that kills them all. The with-skill run ran herdr-cleanup.ps1 -DryRun (live-agent inventory) before stopping anything.", "Baseline knowledge win folded back into the skill: HERDR_SESSION env var (simpler session isolation than HERDR_SOCKET_PATH) is real (src/session.rs:10) and is now documented in SKILL.md.", "Two script defects surfaced by the with-skill window run and fixed post-run: FindWindowW exact-title false-fails from elevated shells (now falls back to WindowsTerminal MainWindowTitle match), and wt --maximized is unreliable (now enforced via ShowWindow SW_MAXIMIZE). Iteration-1 results reflect the pre-fix script.", "Iteration-2 candidates: a discriminating orchestration eval (msg bus routing + team spawn with a scripted fake agent), and re-run of window-management against the fixed script."]}};
+
+    // ---- State ----
+    let feedbackMap = {};  // run_id -> feedback text
+    let currentIndex = 0;
+    let visitedRuns = new Set();
+
+    // ---- Init ----
+    async function init() {
+      // Load saved feedback from server — but only if this isn't a fresh
+      // iteration (indicated by previous_feedback being present). When
+      // previous feedback exists, the feedback.json on disk is stale from
+      // the prior iteration and should not pre-fill the textareas.
+      const hasPrevious = Object.keys(EMBEDDED_DATA.previous_feedback || {}).length > 0
+        || Object.keys(EMBEDDED_DATA.previous_outputs || {}).length > 0;
+      if (!hasPrevious) {
+        try {
+          const resp = await fetch("/api/feedback");
+          const data = await resp.json();
+          if (data.reviews) {
+            for (const r of data.reviews) feedbackMap[r.run_id] = r.feedback;
+          }
+        } catch { /* first run, no feedback yet */ }
+      }
+
+      document.getElementById("skill-name").textContent = EMBEDDED_DATA.skill_name;
+      showRun(0);
+
+      // Wire up feedback auto-save
+      const textarea = document.getElementById("feedback");
+      let saveTimeout = null;
+      textarea.addEventListener("input", () => {
+        clearTimeout(saveTimeout);
+        document.getElementById("feedback-status").textContent = "";
+        saveTimeout = setTimeout(() => saveCurrentFeedback(), 800);
+      });
+    }
+
+    // ---- Navigation ----
+    function navigate(delta) {
+      const newIndex = currentIndex + delta;
+      if (newIndex >= 0 && newIndex < EMBEDDED_DATA.runs.length) {
+        saveCurrentFeedback();
+        showRun(newIndex);
+      }
+    }
+
+    function updateNavButtons() {
+      document.getElementById("prev-btn").disabled = currentIndex === 0;
+      document.getElementById("next-btn").disabled =
+        currentIndex === EMBEDDED_DATA.runs.length - 1;
+    }
+
+    // ---- Show a run ----
+    function showRun(index) {
+      currentIndex = index;
+      const run = EMBEDDED_DATA.runs[index];
+
+      // Progress
+      document.getElementById("progress").textContent =
+        `${index + 1} of ${EMBEDDED_DATA.runs.length}`;
+
+      // Prompt
+      document.getElementById("prompt-text").textContent = run.prompt;
+
+      // Config badge
+      const badge = document.getElementById("config-badge");
+      const configMatch = run.id.match(/(with_skill|without_skill|new_skill|old_skill)/);
+      if (configMatch) {
+        const config = configMatch[1];
+        const isBaseline = config === "without_skill" || config === "old_skill";
+        badge.textContent = config.replace(/_/g, " ");
+        badge.className = "config-badge " + (isBaseline ? "config-baseline" : "config-primary");
+        badge.style.display = "inline-block";
+      } else {
+        badge.style.display = "none";
+      }
+
+      // Outputs
+      renderOutputs(run);
+
+      // Previous outputs
+      renderPrevOutputs(run);
+
+      // Grades
+      renderGrades(run);
+
+      // Previous feedback
+      const prevFb = (EMBEDDED_DATA.previous_feedback || {})[run.id];
+      const prevEl = document.getElementById("prev-feedback");
+      if (prevFb) {
+        document.getElementById("prev-feedback-text").textContent = prevFb;
+        prevEl.style.display = "block";
+      } else {
+        prevEl.style.display = "none";
+      }
+
+      // Feedback
+      document.getElementById("feedback").value = feedbackMap[run.id] || "";
+      document.getElementById("feedback-status").textContent = "";
+
+      updateNavButtons();
+
+      // Track visited runs and promote done button when all visited
+      visitedRuns.add(index);
+      const doneBtn = document.getElementById("done-btn");
+      if (visitedRuns.size >= EMBEDDED_DATA.runs.length) {
+        doneBtn.classList.add("ready");
+      }
+
+      // Scroll main content to top
+      document.querySelector(".main").scrollTop = 0;
+    }
+
+    // ---- Render outputs ----
+    function renderOutputs(run) {
+      const container = document.getElementById("outputs-body");
+      container.innerHTML = "";
+
+      const outputs = run.outputs || [];
+      if (outputs.length === 0) {
+        container.innerHTML = '<div class="empty-state">No output files</div>';
+        return;
+      }
+
+      for (const file of outputs) {
+        const fileDiv = document.createElement("div");
+        fileDiv.className = "output-file";
+
+        // Always show file header with download link
+        const header = document.createElement("div");
+        header.className = "output-file-header";
+        const nameSpan = document.createElement("span");
+        nameSpan.textContent = file.name;
+        header.appendChild(nameSpan);
+        const dlBtn = document.createElement("a");
+        dlBtn.className = "dl-btn";
+        dlBtn.textContent = "Download";
+        dlBtn.download = file.name;
+        dlBtn.href = getDownloadUri(file);
+        header.appendChild(dlBtn);
+        fileDiv.appendChild(header);
+
+        const content = document.createElement("div");
+        content.className = "output-file-content";
+
+        if (file.type === "text") {
+          const pre = document.createElement("pre");
+          pre.textContent = file.content;
+          content.appendChild(pre);
+        } else if (file.type === "image") {
+          const img = document.createElement("img");
+          img.src = file.data_uri;
+          img.alt = file.name;
+          content.appendChild(img);
+        } else if (file.type === "pdf") {
+          const iframe = document.createElement("iframe");
+          iframe.src = file.data_uri;
+          content.appendChild(iframe);
+        } else if (file.type === "xlsx") {
+          renderXlsx(content, file.data_b64);
+        } else if (file.type === "binary") {
+          const a = document.createElement("a");
+          a.className = "download-link";
+          a.href = file.data_uri;
+          a.download = file.name;
+          a.textContent = "Download " + file.name;
+          content.appendChild(a);
+        } else if (file.type === "error") {
+          const pre = document.createElement("pre");
+          pre.textContent = file.content;
+          pre.style.color = "var(--red)";
+          content.appendChild(pre);
+        }
+
+        fileDiv.appendChild(content);
+        container.appendChild(fileDiv);
+      }
+    }
+
+    // ---- XLSX rendering via SheetJS ----
+    function renderXlsx(container, b64Data) {
+      try {
+        const raw = Uint8Array.from(atob(b64Data), c => c.charCodeAt(0));
+        const wb = XLSX.read(raw, { type: "array" });
+
+        for (let i = 0; i < wb.SheetNames.length; i++) {
+          const sheetName = wb.SheetNames[i];
+          const ws = wb.Sheets[sheetName];
+
+          if (wb.SheetNames.length > 1) {
+            const sheetLabel = document.createElement("div");
+            sheetLabel.style.cssText =
+              "font-weight:600; font-size:0.8rem; color:#b0aea5; margin-top:0.5rem; margin-bottom:0.25rem;";
+            sheetLabel.textContent = "Sheet: " + sheetName;
+            container.appendChild(sheetLabel);
+          }
+
+          const htmlStr = XLSX.utils.sheet_to_html(ws, { editable: false });
+          const wrapper = document.createElement("div");
+          wrapper.innerHTML = htmlStr;
+          container.appendChild(wrapper);
+        }
+      } catch (err) {
+        container.textContent = "Error rendering spreadsheet: " + err.message;
+      }
+    }
+
+    // ---- Grades ----
+    function renderGrades(run) {
+      const section = document.getElementById("grades-section");
+      const content = document.getElementById("grades-content");
+
+      if (!run.grading) {
+        section.style.display = "none";
+        return;
+      }
+
+      const grading = run.grading;
+      section.style.display = "block";
+      // Reset to collapsed
+      content.classList.remove("open");
+      document.getElementById("grades-arrow").classList.remove("open");
+
+      const summary = grading.summary || {};
+      const expectations = grading.expectations || [];
+
+      let html = '<div style="padding: 1rem;">';
+
+      // Summary line
+      const passRate = summary.pass_rate != null
+        ? Math.round(summary.pass_rate * 100) + "%"
+        : "?";
+      const badgeClass = summary.pass_rate >= 0.8 ? "grade-pass" : summary.pass_rate >= 0.5 ? "" : "grade-fail";
+      html += '<div class="grades-summary">';
+      html += '<span class="grade-badge ' + badgeClass + '">' + passRate + '</span>';
+      html += '<span>' + (summary.passed || 0) + ' passed, ' + (summary.failed || 0) + ' failed of ' + (summary.total || 0) + '</span>';
+      html += '</div>';
+
+      // Assertions list
+      html += '<ul class="assertion-list">';
+      for (const exp of expectations) {
+        const statusClass = exp.passed ? "pass" : "fail";
+        const statusIcon = exp.passed ? "\u2713" : "\u2717";
+        html += '<li class="assertion-item">';
+        html += '<span class="assertion-status ' + statusClass + '">' + statusIcon + '</span>';
+        html += '<span>' + escapeHtml(exp.text) + '</span>';
+        if (exp.evidence) {
+          html += '<div class="assertion-evidence">' + escapeHtml(exp.evidence) + '</div>';
+        }
+        html += '</li>';
+      }
+      html += '</ul>';
+
+      html += '</div>';
+      content.innerHTML = html;
+    }
+
+    function toggleGrades() {
+      const content = document.getElementById("grades-content");
+      const arrow = document.getElementById("grades-arrow");
+      content.classList.toggle("open");
+      arrow.classList.toggle("open");
+    }
+
+    // ---- Previous outputs (collapsible) ----
+    function renderPrevOutputs(run) {
+      const section = document.getElementById("prev-outputs-section");
+      const content = document.getElementById("prev-outputs-content");
+      const prevOutputs = (EMBEDDED_DATA.previous_outputs || {})[run.id];
+
+      if (!prevOutputs || prevOutputs.length === 0) {
+        section.style.display = "none";
+        return;
+      }
+
+      section.style.display = "block";
+      // Reset to collapsed
+      content.classList.remove("open");
+      document.getElementById("prev-outputs-arrow").classList.remove("open");
+
+      // Render the files into the content area
+      content.innerHTML = "";
+      const wrapper = document.createElement("div");
+      wrapper.style.padding = "1rem";
+
+      for (const file of prevOutputs) {
+        const fileDiv = document.createElement("div");
+        fileDiv.className = "output-file";
+
+        const header = document.createElement("div");
+        header.className = "output-file-header";
+        const nameSpan = document.createElement("span");
+        nameSpan.textContent = file.name;
+        header.appendChild(nameSpan);
+        const dlBtn = document.createElement("a");
+        dlBtn.className = "dl-btn";
+        dlBtn.textContent = "Download";
+        dlBtn.download = file.name;
+        dlBtn.href = getDownloadUri(file);
+        header.appendChild(dlBtn);
+        fileDiv.appendChild(header);
+
+        const fc = document.createElement("div");
+        fc.className = "output-file-content";
+
+        if (file.type === "text") {
+          const pre = document.createElement("pre");
+          pre.textContent = file.content;
+          fc.appendChild(pre);
+        } else if (file.type === "image") {
+          const img = document.createElement("img");
+          img.src = file.data_uri;
+          img.alt = file.name;
+          fc.appendChild(img);
+        } else if (file.type === "pdf") {
+          const iframe = document.createElement("iframe");
+          iframe.src = file.data_uri;
+          fc.appendChild(iframe);
+        } else if (file.type === "xlsx") {
+          renderXlsx(fc, file.data_b64);
+        } else if (file.type === "binary") {
+          const a = document.createElement("a");
+          a.className = "download-link";
+          a.href = file.data_uri;
+          a.download = file.name;
+          a.textContent = "Download " + file.name;
+          fc.appendChild(a);
+        }
+
+        fileDiv.appendChild(fc);
+        wrapper.appendChild(fileDiv);
+      }
+
+      content.appendChild(wrapper);
+    }
+
+    function togglePrevOutputs() {
+      const content = document.getElementById("prev-outputs-content");
+      const arrow = document.getElementById("prev-outputs-arrow");
+      content.classList.toggle("open");
+      arrow.classList.toggle("open");
+    }
+
+    // ---- Feedback (saved to server -> feedback.json) ----
+    function saveCurrentFeedback() {
+      const run = EMBEDDED_DATA.runs[currentIndex];
+      const text = document.getElementById("feedback").value;
+
+      if (text.trim() === "") {
+        delete feedbackMap[run.id];
+      } else {
+        feedbackMap[run.id] = text;
+      }
+
+      // Build reviews array from map
+      const reviews = [];
+      for (const [run_id, feedback] of Object.entries(feedbackMap)) {
+        if (feedback.trim()) {
+          reviews.push({ run_id, feedback, timestamp: new Date().toISOString() });
+        }
+      }
+
+      fetch("/api/feedback", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reviews, status: "in_progress" }),
+      }).then(() => {
+        document.getElementById("feedback-status").textContent = "Saved";
+      }).catch(() => {
+        // Static mode or server unavailable — no-op on auto-save,
+        // feedback will be downloaded on final submit
+        document.getElementById("feedback-status").textContent = "Will download on submit";
+      });
+    }
+
+    // ---- Done ----
+    function showDoneDialog() {
+      // Save current textarea to feedbackMap (but don't POST yet)
+      const run = EMBEDDED_DATA.runs[currentIndex];
+      const text = document.getElementById("feedback").value;
+      if (text.trim() === "") {
+        delete feedbackMap[run.id];
+      } else {
+        feedbackMap[run.id] = text;
+      }
+
+      // POST once with status: complete — include ALL runs so the model
+      // can distinguish "no feedback" (looks good) from "not reviewed"
+      const reviews = [];
+      const ts = new Date().toISOString();
+      for (const r of EMBEDDED_DATA.runs) {
+        reviews.push({ run_id: r.id, feedback: feedbackMap[r.id] || "", timestamp: ts });
+      }
+      const payload = JSON.stringify({ reviews, status: "complete" }, null, 2);
+      fetch("/api/feedback", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: payload,
+      }).then(() => {
+        document.getElementById("done-overlay").classList.add("visible");
+      }).catch(() => {
+        // Server not available (static mode) — download as file
+        const blob = new Blob([payload], { type: "application/json" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = "feedback.json";
+        a.click();
+        URL.revokeObjectURL(url);
+        document.getElementById("done-overlay").classList.add("visible");
+      });
+    }
+
+    function closeDoneDialog() {
+      // Reset status back to in_progress
+      saveCurrentFeedback();
+      document.getElementById("done-overlay").classList.remove("visible");
+    }
+
+    // ---- Toast ----
+    function showToast(message) {
+      const toast = document.getElementById("toast");
+      toast.textContent = message;
+      toast.classList.add("visible");
+      setTimeout(() => toast.classList.remove("visible"), 2000);
+    }
+
+    // ---- Keyboard nav ----
+    document.addEventListener("keydown", (e) => {
+      // Don't capture when typing in textarea
+      if (e.target.tagName === "TEXTAREA") return;
+
+      if (e.key === "ArrowLeft" || e.key === "ArrowUp") {
+        e.preventDefault();
+        navigate(-1);
+      } else if (e.key === "ArrowRight" || e.key === "ArrowDown") {
+        e.preventDefault();
+        navigate(1);
+      }
+    });
+
+    // ---- Util ----
+    function getDownloadUri(file) {
+      if (file.data_uri) return file.data_uri;
+      if (file.data_b64) return "data:application/octet-stream;base64," + file.data_b64;
+      if (file.type === "text") return "data:text/plain;charset=utf-8," + encodeURIComponent(file.content);
+      return "#";
+    }
+
+    function escapeHtml(text) {
+      const div = document.createElement("div");
+      div.textContent = text;
+      return div.innerHTML;
+    }
+
+    // ---- View switching ----
+    function switchView(view) {
+      document.querySelectorAll(".view-tab").forEach(t => t.classList.remove("active"));
+      document.querySelectorAll(".view-panel").forEach(p => p.classList.remove("active"));
+      document.querySelector(`[onclick="switchView('${view}')"]`).classList.add("active");
+      document.getElementById("panel-" + view).classList.add("active");
+    }
+
+    // ---- Benchmark rendering ----
+    function renderBenchmark() {
+      const data = EMBEDDED_DATA.benchmark;
+      if (!data) return;
+
+      // Show the tabs
+      document.getElementById("view-tabs").style.display = "flex";
+
+      const container = document.getElementById("benchmark-content");
+      const summary = data.run_summary || {};
+      const metadata = data.metadata || {};
+      const notes = data.notes || [];
+
+      let html = "";
+
+      // Header
+      html += "<h2 style='font-family: Poppins, sans-serif; margin-bottom: 0.5rem;'>Benchmark Results</h2>";
+      html += "<p style='color: var(--text-muted); font-size: 0.875rem; margin-bottom: 1.25rem;'>";
+      if (metadata.skill_name) html += "<strong>" + escapeHtml(metadata.skill_name) + "</strong> &mdash; ";
+      if (metadata.timestamp) html += metadata.timestamp + " &mdash; ";
+      if (metadata.evals_run) html += "Evals: " + metadata.evals_run.join(", ") + " &mdash; ";
+      html += (metadata.runs_per_configuration || "?") + " runs per configuration";
+      html += "</p>";
+
+      // Summary table
+      html += '<table class="benchmark-table">';
+
+      function fmtStat(stat, pct) {
+        if (!stat) return "—";
+        const suffix = pct ? "%" : "";
+        const m = pct ? (stat.mean * 100).toFixed(0) : stat.mean.toFixed(1);
+        const s = pct ? (stat.stddev * 100).toFixed(0) : stat.stddev.toFixed(1);
+        return m + suffix + " ± " + s + suffix;
+      }
+
+      function deltaClass(val) {
+        if (!val) return "";
+        const n = parseFloat(val);
+        if (n > 0) return "benchmark-delta-positive";
+        if (n < 0) return "benchmark-delta-negative";
+        return "";
+      }
+
+      // Discover config names dynamically (everything except "delta")
+      const configs = Object.keys(summary).filter(k => k !== "delta");
+      const configA = configs[0] || "config_a";
+      const configB = configs[1] || "config_b";
+      const labelA = configA.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
+      const labelB = configB.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
+      const a = summary[configA] || {};
+      const b = summary[configB] || {};
+      const delta = summary.delta || {};
+
+      html += "<thead><tr><th>Metric</th><th>" + escapeHtml(labelA) + "</th><th>" + escapeHtml(labelB) + "</th><th>Delta</th></tr></thead>";
+      html += "<tbody>";
+
+      html += "<tr><td><strong>Pass Rate</strong></td>";
+      html += "<td>" + fmtStat(a.pass_rate, true) + "</td>";
+      html += "<td>" + fmtStat(b.pass_rate, true) + "</td>";
+      html += '<td class="' + deltaClass(delta.pass_rate) + '">' + (delta.pass_rate || "—") + "</td></tr>";
+
+      // Time (only show row if data exists)
+      if (a.time_seconds || b.time_seconds) {
+        html += "<tr><td><strong>Time (s)</strong></td>";
+        html += "<td>" + fmtStat(a.time_seconds, false) + "</td>";
+        html += "<td>" + fmtStat(b.time_seconds, false) + "</td>";
+        html += '<td class="' + deltaClass(delta.time_seconds) + '">' + (delta.time_seconds ? delta.time_seconds + "s" : "—") + "</td></tr>";
+      }
+
+      // Tokens (only show row if data exists)
+      if (a.tokens || b.tokens) {
+        html += "<tr><td><strong>Tokens</strong></td>";
+        html += "<td>" + fmtStat(a.tokens, false) + "</td>";
+        html += "<td>" + fmtStat(b.tokens, false) + "</td>";
+        html += '<td class="' + deltaClass(delta.tokens) + '">' + (delta.tokens || "—") + "</td></tr>";
+      }
+
+      html += "</tbody></table>";
+
+      // Per-eval breakdown (if runs data available)
+      const runs = data.runs || [];
+      if (runs.length > 0) {
+        const evalIds = [...new Set(runs.map(r => r.eval_id))].sort((a, b) => a - b);
+
+        html += "<h3 style='font-family: Poppins, sans-serif; margin-bottom: 0.75rem;'>Per-Eval Breakdown</h3>";
+
+        const hasTime = runs.some(r => r.result && r.result.time_seconds != null);
+        const hasErrors = runs.some(r => r.result && r.result.errors > 0);
+
+        for (const evalId of evalIds) {
+          const evalRuns = runs.filter(r => r.eval_id === evalId);
+          const evalName = evalRuns[0] && evalRuns[0].eval_name ? evalRuns[0].eval_name : "Eval " + evalId;
+
+          html += "<h4 style='font-family: Poppins, sans-serif; margin: 1rem 0 0.5rem; color: var(--text);'>" + escapeHtml(evalName) + "</h4>";
+          html += '<table class="benchmark-table">';
+          html += "<thead><tr><th>Config</th><th>Run</th><th>Pass Rate</th>";
+          if (hasTime) html += "<th>Time (s)</th>";
+          if (hasErrors) html += "<th>Crashes During Execution</th>";
+          html += "</tr></thead>";
+          html += "<tbody>";
+
+          // Group by config and render with average rows
+          const configGroups = [...new Set(evalRuns.map(r => r.configuration))];
+          for (let ci = 0; ci < configGroups.length; ci++) {
+            const config = configGroups[ci];
+            const configRuns = evalRuns.filter(r => r.configuration === config);
+            if (configRuns.length === 0) continue;
+
+            const rowClass = ci === 0 ? "benchmark-row-with" : "benchmark-row-without";
+            const configLabel = config.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
+
+            for (const run of configRuns) {
+              const r = run.result || {};
+              const prClass = r.pass_rate >= 0.8 ? "benchmark-delta-positive" : r.pass_rate < 0.5 ? "benchmark-delta-negative" : "";
+              html += '<tr class="' + rowClass + '">';
+              html += "<td>" + configLabel + "</td>";
+              html += "<td>" + run.run_number + "</td>";
+              html += '<td class="' + prClass + '">' + ((r.pass_rate || 0) * 100).toFixed(0) + "% (" + (r.passed || 0) + "/" + (r.total || 0) + ")</td>";
+              if (hasTime) html += "<td>" + (r.time_seconds != null ? r.time_seconds.toFixed(1) : "—") + "</td>";
+              if (hasErrors) html += "<td>" + (r.errors || 0) + "</td>";
+              html += "</tr>";
+            }
+
+            // Average row
+            const rates = configRuns.map(r => (r.result || {}).pass_rate || 0);
+            const avgRate = rates.reduce((a, b) => a + b, 0) / rates.length;
+            const avgPrClass = avgRate >= 0.8 ? "benchmark-delta-positive" : avgRate < 0.5 ? "benchmark-delta-negative" : "";
+            html += '<tr class="benchmark-row-avg ' + rowClass + '">';
+            html += "<td>" + configLabel + "</td>";
+            html += "<td>Avg</td>";
+            html += '<td class="' + avgPrClass + '">' + (avgRate * 100).toFixed(0) + "%</td>";
+            if (hasTime) {
+              const times = configRuns.map(r => (r.result || {}).time_seconds).filter(t => t != null);
+              html += "<td>" + (times.length ? (times.reduce((a, b) => a + b, 0) / times.length).toFixed(1) : "—") + "</td>";
+            }
+            if (hasErrors) html += "<td></td>";
+            html += "</tr>";
+          }
+          html += "</tbody></table>";
+
+          // Per-assertion detail for this eval
+          const runsWithExpectations = {};
+          for (const config of configGroups) {
+            runsWithExpectations[config] = evalRuns.filter(r => r.configuration === config && r.expectations && r.expectations.length > 0);
+          }
+          const hasAnyExpectations = Object.values(runsWithExpectations).some(runs => runs.length > 0);
+          if (hasAnyExpectations) {
+            // Collect all unique assertion texts across all configs
+            const allAssertions = [];
+            const seen = new Set();
+            for (const config of configGroups) {
+              for (const run of runsWithExpectations[config]) {
+                for (const exp of (run.expectations || [])) {
+                  if (!seen.has(exp.text)) {
+                    seen.add(exp.text);
+                    allAssertions.push(exp.text);
+                  }
+                }
+              }
+            }
+
+            html += '<table class="benchmark-table" style="margin-top: 0.5rem;">';
+            html += "<thead><tr><th>Assertion</th>";
+            for (const config of configGroups) {
+              const label = config.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
+              html += "<th>" + escapeHtml(label) + "</th>";
+            }
+            html += "</tr></thead><tbody>";
+
+            for (const assertionText of allAssertions) {
+              html += "<tr><td>" + escapeHtml(assertionText) + "</td>";
+
+              for (const config of configGroups) {
+                html += "<td>";
+                for (const run of runsWithExpectations[config]) {
+                  const exp = (run.expectations || []).find(e => e.text === assertionText);
+                  if (exp) {
+                    const cls = exp.passed ? "benchmark-delta-positive" : "benchmark-delta-negative";
+                    const icon = exp.passed ? "\u2713" : "\u2717";
+                    html += '<span class="' + cls + '" title="Run ' + run.run_number + ': ' + escapeHtml(exp.evidence || "") + '">' + icon + "</span> ";
+                  } else {
+                    html += "— ";
+                  }
+                }
+                html += "</td>";
+              }
+              html += "</tr>";
+            }
+            html += "</tbody></table>";
+          }
+        }
+      }
+
+      // Notes
+      if (notes.length > 0) {
+        html += '<div class="benchmark-notes">';
+        html += "<h3>Analysis Notes</h3>";
+        html += "<ul>";
+        for (const note of notes) {
+          html += "<li>" + escapeHtml(note) + "</li>";
+        }
+        html += "</ul></div>";
+      }
+
+      container.innerHTML = html;
+    }
+
+    // ---- Start ----
+    init();
+    renderBenchmark();
+  </script>
+</body>
+</html>

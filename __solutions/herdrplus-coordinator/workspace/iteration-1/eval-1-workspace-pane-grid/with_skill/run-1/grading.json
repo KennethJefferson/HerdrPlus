@@ -1,0 +1,35 @@
+{
+  "expectations": [
+    {
+      "text": "report lists three distinct real pane IDs from JSON",
+      "passed": true,
+      "evidence": "w1:p1/w1:p2/w1:p3 with terminal IDs term_656f97*"
+    },
+    {
+      "text": "captured ready-build/ready-test/ready-logs from correct panes",
+      "passed": true,
+      "evidence": "per-pane captured output blocks show each ready-* marker at the matching labeled pane"
+    },
+    {
+      "text": "panes labeled build/test/logs and balance invoked",
+      "passed": true,
+      "evidence": "labels in layout tree; pane balance --tab w1:t1 returned layout_balanced changed:true with equal-area ratios"
+    },
+    {
+      "text": "isolated grid1 session, not default",
+      "passed": true,
+      "evidence": "headless herdrplus --session grid1 server; commands aimed via HERDR_SOCKET_PATH; default not running throughout"
+    },
+    {
+      "text": "postcheck shows zero herdr processes",
+      "passed": true,
+      "evidence": "postcheck.json: herdr_process_count=0; session stopped+deleted"
+    }
+  ],
+  "summary": {
+    "failed": 0,
+    "pass_rate": 1.0,
+    "passed": 5,
+    "total": 5
+  }
+}

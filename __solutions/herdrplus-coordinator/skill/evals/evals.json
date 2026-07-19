@@ -1,0 +1,26 @@
+{
+  "skill_name": "herdrplus-coordinator",
+  "evals": [
+    {
+      "id": 0,
+      "name": "session-lifecycle-cleanup",
+      "prompt": "herdr keeps hogging RAM on my machine even after I close its window. Start a throwaway herdr session named 'ram1' (do NOT touch my default session), confirm its server is actually running, then shut everything down completely and verify no herdr processes are left running. Write report.md into the outputs directory with the commands you used and evidence for each state (running, stopped, process-free).",
+      "expected_output": "report.md showing a named session started headless, confirmed via session list/status JSON, stopped gracefully, and a final zero-herdr-process check; default session untouched",
+      "files": []
+    },
+    {
+      "id": 1,
+      "name": "workspace-pane-grid",
+      "prompt": "In an isolated herdr session named 'grid1' (never touch the default session), create a workspace containing three panes laid out sensibly, label them build, test, and logs, then run echo ready-build / ready-test / ready-logs in the matching panes and capture each pane's output. Balance the pane layout when done, then tear the whole session down. Save report.md to the outputs directory listing the pane IDs, the captured outputs, and teardown evidence.",
+      "expected_output": "report.md with three real pane IDs, captured ready-* output from each pane, a balance call, and evidence the session was stopped with no herdr processes left",
+      "files": []
+    },
+    {
+      "id": 2,
+      "name": "window-management",
+      "prompt": "Open the HerdrPlus window on my desktop, maximized. Verify it's actually open, then close just the window and confirm the herdr server is still alive afterwards (that's the point of its client/server design). Finally clean up the server completely too so nothing is left in RAM. Write report.md to the outputs directory documenting each phase with evidence.",
+      "expected_output": "report.md showing the window opened maximized (hwnd/verification), window closed with server surviving (status running=true), then full cleanup with zero herdr processes",
+      "files": []
+    }
+  ]
+}

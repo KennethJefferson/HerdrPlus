@@ -1,0 +1,12 @@
+{
+  "eval_id": 1,
+  "eval_name": "workspace-pane-grid",
+  "prompt": "In an isolated herdr session named 'grid1' (never touch the default session), create a workspace containing three panes laid out sensibly, label them build, test, and logs, then run echo ready-build / ready-test / ready-logs in the matching panes and capture each pane's output. Balance the pane layout when done, then tear the whole session down. Save report.md to the outputs directory listing the pane IDs, the captured outputs, and teardown evidence.",
+  "assertions": [
+    "report.md exists and lists three distinct real pane IDs (w<N>:p<N>-style, taken from JSON responses)",
+    "report shows captured pane output containing ready-build, ready-test, and ready-logs from the correct panes",
+    "panes were labeled build, test, logs via pane rename (or split metadata) and 'pane balance' was invoked",
+    "the work happened in an isolated session named grid1 (HERDR_SOCKET_PATH or --session evidence), not the default session",
+    "postcheck.json recorded after the run shows zero herdr/herdrplus processes remaining"
+  ]
+}

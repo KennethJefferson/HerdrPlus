@@ -1,0 +1,12 @@
+{
+  "sessions": [
+    {
+      "default": true,
+      "name": "default",
+      "running": false,
+      "session_dir": "C:\\Users\\Tony Baloney\\AppData\\Roaming\\herdr",
+      "socket_path": "C:\\Users\\Tony Baloney\\AppData\\Roaming\\herdr\\herdr.sock"
+    }
+  ],
+  "herdr_process_count": 0
+}

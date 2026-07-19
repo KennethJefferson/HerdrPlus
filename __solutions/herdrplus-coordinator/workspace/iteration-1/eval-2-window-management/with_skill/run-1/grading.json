@@ -1,0 +1,35 @@
+{
+  "expectations": [
+    {
+      "text": "all three phases documented with evidence",
+      "passed": true,
+      "evidence": "phases open/verify/close-with-server-survival/cleanup each have JSON+process evidence"
+    },
+    {
+      "text": "window verifiably opened (not fired blind)",
+      "passed": true,
+      "evidence": "wt window found via WindowsTerminal PID 2124, title HerdrPlus[default], visible:true, then IsZoomed:true with full-desktop rect after ShowWindow fixup; script's FindWindowW-by-title false-failed (defect noted and since fixed)"
+    },
+    {
+      "text": "server still running after window close",
+      "passed": true,
+      "evidence": "WM_CLOSE to hwnd 266894; client exited, server PID 24208 stayed alive and answered status --json running:true"
+    },
+    {
+      "text": "full cleanup, zero herdr processes",
+      "passed": true,
+      "evidence": "herdr-cleanup.ps1 dry-run then real: default session stopped, 18.5MB freed, force_killed []; postcheck.json herdr_process_count=0, herdrplus_windows=0"
+    },
+    {
+      "text": "did not block on interactive TUI",
+      "passed": true,
+      "evidence": "TUI ran in separate wt window; agent shell never attached"
+    }
+  ],
+  "summary": {
+    "failed": 0,
+    "pass_rate": 1.0,
+    "passed": 5,
+    "total": 5
+  }
+}
