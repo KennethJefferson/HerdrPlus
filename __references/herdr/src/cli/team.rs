@@ -28,6 +28,7 @@ pub(super) fn run_team_command(args: &[String]) -> std::io::Result<i32> {
 fn print_team_help() {
     eprintln!("usage: herdr team spawn <name> --agents <entry>[,<entry>...] [--cwd DIR] [--with-orch [CMD]] [--wait] [--timeout SECS]");
     eprintln!("  entry = <agent> | <label>=<agent>   (agent resolved via [team.agents] config; unknown names run verbatim)");
+    eprintln!("  entries with commas or complex quoting: define them in [team.agents] config instead");
 }
 
 pub(super) fn parse_spawn_args(args: &[String]) -> Result<SpawnArgs, String> {
@@ -49,10 +50,7 @@ pub(super) fn parse_spawn_args(args: &[String]) -> Result<SpawnArgs, String> {
                     if raw.is_empty() {
                         return Err("empty --agents entry".into());
                     }
-                    let (label, agent) = match raw.split_once('=') {
-                        Some((label, agent)) => (Some(label.to_string()), agent.to_string()),
-                        None => (None, raw.to_string()),
-                    };
+                    let (label, agent) = split_label(raw);
                     if agent.trim().is_empty() {
                         return Err(format!("entry {raw:?} has an empty agent"));
                     }
@@ -100,6 +98,11 @@ pub(super) fn parse_spawn_args(args: &[String]) -> Result<SpawnArgs, String> {
     if entries.is_empty() {
         return Err("--agents with at least one entry is required".into());
     }
+    let cwd = cwd.or_else(|| {
+        std::env::current_dir()
+            .ok()
+            .map(|p| p.to_string_lossy().into_owned())
+    });
     Ok(SpawnArgs {
         params: TeamSpawnParams {
             name,
@@ -112,6 +115,17 @@ pub(super) fn parse_spawn_args(args: &[String]) -> Result<SpawnArgs, String> {
         wait,
         timeout_secs,
     })
+}
+
+fn split_label(raw: &str) -> (Option<String>, String) {
+    if let Some((label, agent)) = raw.split_once('=') {
+        let is_ident = !label.is_empty()
+            && label.chars().all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-');
+        if is_ident {
+            return (Some(label.to_string()), agent.to_string());
+        }
+    }
+    (None, raw.to_string())
 }
 
 fn team_spawn(args: &[String]) -> std::io::Result<i32> {
@@ -136,14 +150,14 @@ fn team_spawn(args: &[String]) -> std::io::Result<i32> {
     wait_for_team_ready(&response, timeout_secs)
 }
 
-/// Poll each detectable agent pane until agent_status != "unknown", or timeout.
+/// Poll each detectable agent pane until the agent is recognized or agent_status != "unknown", or timeout.
 /// Prints a per-pane readiness report; exit 0 all ready, exit 3 on timeout.
 fn wait_for_team_ready(spawn_response: &serde_json::Value, timeout_secs: u64) -> std::io::Result<i32> {
     let panes = spawn_response["result"]["panes"]
         .as_array()
         .cloned()
         .unwrap_or_default();
-    // detectable = herdr's detect module knows this agent name (claude/codex/gemini/pi/...)
+    // detectable = herdr's detect module knows ~21 agents (claude/codex/gemini/pi/.../omp/grok)
     let mut pending: BTreeMap<String, String> = panes
         .iter()
         .filter(|p| {
@@ -182,8 +196,10 @@ fn wait_for_team_ready(spawn_response: &serde_json::Value, timeout_secs: u64) ->
                 id: "cli:team:wait".into(),
                 method: Method::PaneGet(PaneTarget { pane_id: pane_id.clone() }),
             })?;
-            let status = response["result"]["pane"]["agent_status"].as_str().unwrap_or("unknown");
-            if status != "unknown" {
+            let pane = &response["result"]["pane"];
+            let recognized = pane["agent"].as_str().map(|a| !a.is_empty()).unwrap_or(false);
+            let status = pane["agent_status"].as_str().unwrap_or("unknown");
+            if recognized || status != "unknown" {
                 ready.push(pane_id);
             }
         }
@@ -264,5 +280,29 @@ mod tests {
     fn default_timeout_is_60() {
         let parsed = parse_spawn_args(&args(&["t", "--agents", "pi", "--wait"])).unwrap();
         assert_eq!(parsed.timeout_secs, 60);
+    }
+
+    #[test]
+    fn default_cwd_is_process_cwd() {
+        let parsed = parse_spawn_args(&args(&["t", "--agents", "pi"])).unwrap();
+        assert_eq!(
+            parsed.params.cwd,
+            Some(std::env::current_dir().unwrap().to_string_lossy().into_owned())
+        );
+    }
+
+    #[test]
+    fn entry_with_equals_in_command_is_passthrough() {
+        let parsed = parse_spawn_args(&args(&["t", "--agents", "claude --model=x"])).unwrap();
+        assert_eq!(parsed.params.entries.len(), 1);
+        assert_eq!(parsed.params.entries[0].label, None);
+        assert_eq!(parsed.params.entries[0].agent, "claude --model=x");
+    }
+
+    #[test]
+    fn identifier_label_still_parses() {
+        let parsed = parse_spawn_args(&args(&["t", "--agents", "ws-1=claude"])).unwrap();
+        assert_eq!(parsed.params.entries[0].label.as_deref(), Some("ws-1"));
+        assert_eq!(parsed.params.entries[0].agent, "claude");
     }
 }
