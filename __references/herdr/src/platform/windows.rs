@@ -29,7 +29,7 @@ use windows_sys::{
             Threading::{
                 GetCurrentProcess, GetExitCodeProcess, OpenProcess, TerminateProcess,
                 CREATE_NO_WINDOW, DETACHED_PROCESS, PROCESS_BASIC_INFORMATION,
-                PROCESS_QUERY_LIMITED_INFORMATION, PROCESS_VM_READ,
+                PROCESS_QUERY_LIMITED_INFORMATION, PROCESS_TERMINATE, PROCESS_VM_READ,
             },
         },
         UI::Shell::{CommandLineToArgvW, ShellExecuteW},
@@ -440,7 +440,7 @@ pub fn signal_processes(pids: &[u32], signal: Signal) {
     }
 
     for &pid in pids {
-        let Some(process) = ProcessHandle::open(pid, PROCESS_QUERY_LIMITED_INFORMATION) else {
+        let Some(process) = ProcessHandle::open(pid, PROCESS_TERMINATE) else {
             continue;
         };
         unsafe {
@@ -688,6 +688,34 @@ mod tests {
             }
             process_ids.resize(count, 0);
         }
+    }
+
+    #[test]
+    fn windows_signal_processes_kill_terminates_target() {
+        let mut child = Command::new("ping")
+            .args(["-n", "31", "127.0.0.1"])
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .expect("spawn sleeper child");
+        let pid = child.id();
+
+        super::signal_processes(&[pid], super::Signal::Kill);
+
+        let deadline = Instant::now() + Duration::from_secs(5);
+        let exited = loop {
+            match child.try_wait().expect("query sleeper child") {
+                Some(_) => break true,
+                None if Instant::now() >= deadline => break false,
+                None => thread::sleep(Duration::from_millis(50)),
+            }
+        };
+        if !exited {
+            let _ = child.kill();
+            let _ = child.wait();
+        }
+        assert!(exited, "Signal::Kill left the target process running");
     }
 
     #[test]

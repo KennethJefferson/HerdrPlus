@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 This file is append-only: new entries go on top, existing entries are never rewritten.
 
+## [0.4.1] - 2026-07-19
+
+### Fixed
+
+- Windows pane-kill was a silent no-op: `signal_processes` opened target processes with only `PROCESS_QUERY_LIMITED_INFORMATION`, so every `TerminateProcess` call failed with access denied. Pane teardown only worked when ConPTY closure happened to take the shell down; when that raced shell startup, the shell leaked and `child.wait()` blocked forever — the root cause of the long-standing flaky suite hangs (a pane-spawning test's tokio runtime drop then joined the blocking pool indefinitely). Fixed by opening with `PROCESS_TERMINATE`; regression-tested by killing a real process (`windows_signal_processes_kill_terminates_target`), and the previously ~50%-hanging `deferred_api_worktree_create_completes_after_source_workspace_changes` now passes 10/10.
+
 ## [0.4.0] - 2026-07-18
 
 ### Added
