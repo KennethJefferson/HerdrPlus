@@ -98,11 +98,15 @@ pub(super) fn parse_spawn_args(args: &[String]) -> Result<SpawnArgs, String> {
     if entries.is_empty() {
         return Err("--agents with at least one entry is required".into());
     }
-    let cwd = cwd.or_else(|| {
-        std::env::current_dir()
-            .ok()
-            .map(|p| p.to_string_lossy().into_owned())
-    });
+    let cwd = match cwd {
+        Some(cwd) => Some(cwd),
+        None => Some(
+            std::env::current_dir()
+                .map_err(|err| format!("cannot resolve current directory for --cwd: {err}"))?
+                .to_string_lossy()
+                .into_owned(),
+        ),
+    };
     Ok(SpawnArgs {
         params: TeamSpawnParams {
             name,

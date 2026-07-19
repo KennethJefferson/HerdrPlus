@@ -84,9 +84,25 @@ impl App {
             let label = match &entry.label {
                 Some(label) => label.trim().to_string(),
                 None => {
-                    let n = counters.entry(entry.agent.clone()).or_insert(0);
+                    // Passthrough commands can carry flags/paths; auto-labels
+                    // derive from the executable's base name, reduced to the
+                    // label charset, so "claude --model=x" labels as claude-1.
+                    let base: String = entry
+                        .agent
+                        .split_whitespace()
+                        .next()
+                        .unwrap_or_default()
+                        .rsplit(['/', '\\'])
+                        .next()
+                        .unwrap_or_default()
+                        .trim_end_matches(".exe")
+                        .chars()
+                        .filter(|c| c.is_ascii_alphanumeric() || *c == '_' || *c == '-')
+                        .collect();
+                    let base = if base.is_empty() { "agent".to_string() } else { base };
+                    let n = counters.entry(base.clone()).or_insert(0);
                     *n += 1;
-                    format!("{}-{}", entry.agent, n)
+                    format!("{}-{}", base, n)
                 }
             };
             if !valid_name(&label) || (params.with_orch && label == "orch") {
@@ -451,6 +467,26 @@ mod tests {
         assert_eq!(app.state.msg_bus.group_members("mid").len(), 6);
         assert_eq!(app.state.workspaces.len(), 2, "home + team workspace");
         assert_eq!(app.state.workspaces[1].tabs[0].panes.len(), 6);
+    }
+
+    #[tokio::test]
+    async fn passthrough_command_auto_label_uses_executable_base() {
+        let mut app = app();
+        let res = app.handle_team_spawn(
+            "req_1".into(),
+            spawn_params(
+                "pt",
+                vec![
+                    entry(None, "claude --model=x"),
+                    entry(None, "C:/tools/mytool.exe --flag value"),
+                ],
+            ),
+        );
+        let (_, _, panes) = parse_spawned(&res);
+        assert_eq!(panes[0].label, "claude-1");
+        assert_eq!(panes[0].command, "claude --model=x");
+        assert_eq!(panes[1].label, "mytool-1");
+        assert_eq!(panes[1].command, "C:/tools/mytool.exe --flag value");
     }
 
     #[tokio::test]
