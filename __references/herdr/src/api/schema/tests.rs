@@ -1256,3 +1256,24 @@ fn msg_methods_serde_round_trip() {
     let back: Method = serde_json::from_value(json).unwrap();
     assert_eq!(back, method);
 }
+
+#[test]
+fn team_methods_serde_round_trip() {
+    let method = Method::TeamSpawn(TeamSpawnParams {
+        name: "review".into(),
+        entries: vec![
+            TeamSpawnEntry { label: Some("ws1".into()), agent: "claude".into() },
+            TeamSpawnEntry { label: None, agent: "grok".into() },
+        ],
+        cwd: Some("C:/work".into()),
+        with_orch: true,
+        orch_command: None,
+        focus: false,
+    });
+    let json = serde_json::to_value(&method).unwrap();
+    assert_eq!(json["method"], "team.spawn");
+    assert_eq!(json["params"]["name"], "review");
+    assert_eq!(json["params"]["entries"][0]["label"], "ws1");
+    let back: Method = serde_json::from_value(json).unwrap();
+    assert_eq!(back, method);
+}

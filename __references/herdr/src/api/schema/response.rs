@@ -19,6 +19,7 @@ use super::server::ServerCapabilities;
 use super::session::SessionSnapshot;
 use super::tabs::TabInfo;
 use super::workspaces::WorkspaceInfo;
+use super::team::TeamPaneInfo;
 use super::worktrees::{WorktreeInfo, WorktreeSourceInfo};
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
@@ -261,6 +262,11 @@ pub enum ResponseResult {
     MsgWho {
         panes: Vec<super::msg::MsgWhoPaneInfo>,
         groups: Vec<super::msg::MsgWhoGroupInfo>,
+    },
+    TeamSpawned {
+        workspace: WorkspaceInfo,
+        group: String,
+        panes: Vec<TeamPaneInfo>,
     },
     Ok {},
 }
