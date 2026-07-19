@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 This file is append-only: new entries go on top, existing entries are never rewritten.
 
+## [0.4.0] - 2026-07-18
+
+### Added
+
+- `herdrplus team spawn <name> --agents <entry>[,...]` — one-shot team creation: workspace + N labeled agent panes + agent CLI launched in each + all panes joined to msg group `<name>`; balanced grid layout; label→pane map returned as JSON. Optional `--with-orch [cmd]` orchestrator pane, `--cwd` (defaults to caller's cwd), `--wait [--timeout secs]` readiness polling (ready = agent recognized OR agent state detected; exit 3 on timeout with team still up). Server-native wire method `team.spawn` composed from the existing workspace/pane/msg/layout handlers; rollback on partial failure closes the workspace through the hardened msg-teardown cascade and restores the caller's focus. Validation: reserved team name `all`, pane-id-shaped labels rejected, labels trimmed, duplicate labels refused, existing group names refused (`team_exists`), 24-pane cap (`team_too_large`).
+- `[team.agents]` config section: agent name → launch command registry (e.g. `claude = "claude --dangerously-skip-permissions"`); unknown roster names pass through verbatim as commands. Live-reloadable.
+- Roster grammar: `label=agent` only when the label is a simple identifier (`[A-Za-z0-9_-]+`); anything else is treated as a verbatim command, so `claude --model=x` launches as a command rather than misparsing as a label.
+
+### Changed
+
+- Protocol version 18 → 19 (strict-equality gate; schema artifact regenerated).
+
+### Provenance
+
+- Design + implementation reviewed externally (GPT-5.6 Sol, high effort): 5 major spec findings folded in pre-merge (readiness signal, reserved/shadowed names, cwd ownership, rollback focus restoration + documented atomicity contract, passthrough grammar).
+
 ## [0.3.2] - 2026-07-18
 
 ### Fixed

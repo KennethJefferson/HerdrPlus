@@ -87,6 +87,38 @@ pi     = "pi"                          # pi has no approval prompts; runs YOLO b
 - **Protocol 19:** all four checklist sites updated.
 - **Live e2e before PR (real binary):** spawn a real mixed team (`claude` + `grok`), agents boot, `--wait` reaches ready, msg round-trip between two spawned panes, and the ConPTY input-buffering assumption holds.
 
+## Post-review amendments (Sol56 spec review, 2026-07-18)
+
+External review (GPT-5.6 Sol, high effort; 5 major findings, no blockers) landed after
+implementation began. Resolutions:
+
+1. **Readiness signal:** `--wait` treats a pane as ready when `PaneInfo.agent` is set
+   (process recognized) OR `agent_status != unknown` — not `agent_status` alone. The detect
+   module recognizes ~21 agents including omp and grok; roster names it can't identify are
+   excluded from the wait and reported as `not detectable`.
+2. **Name rules:** team name `all` is reserved (`@all` is the broadcast target). Labels
+   matching canonical pane-id grammar (`w1:p2`) are rejected as unaddressable. Explicit
+   labels are trimmed before validation/duplicate checks (pane rename trims). Team spawn is
+   intentionally stricter than the raw msg-bus validator (which permits whitespace and
+   embedded `@`).
+3. **cwd ownership:** the CLI always resolves and sends `cwd` (defaulting to the caller's
+   `current_dir()`); an omitted wire `cwd` is server-default behavior for raw API callers only.
+4. **Atomicity contract:** atomic means *no persistent herdr workspace/msg state remains*
+   after a failed spawn, and the caller's `active`/`selected` focus is restored. It does NOT
+   mean external side effects are undone: launch commands already delivered to earlier panes
+   may have briefly executed, and event subscribers may observe partial-team
+   creation events followed by `WorkspaceClosed` (the composed handlers emit their normal
+   events). Deferred-event/low-level-mutation rework is explicitly out of v1 scope.
+5. **Roster grammar:** an entry is `label=agent` only when the text before the first `=` is a
+   simple identifier (`[A-Za-z0-9_-]+`); otherwise the whole entry is the command, verbatim
+   (so `claude --model=x` is a command, not a label). Commas remain structural — commands
+   containing commas must be defined in `[team.agents]`.
+6. **Roster cap:** max 24 panes per team (matches the layout API's generated-layout cap).
+   Error `team_too_large`.
+
 ## Review provenance
 
-Brainstormed and approved in-session 2026-07-18. External review (Sol56) expected at implementation-diff stage, per the two-reviewer gate.
+Brainstormed and approved in-session 2026-07-18. Sol56 spec review completed post-hoc same
+day (5 majors folded in as fix tasks 6-7; verdict: server-native direction sound, teardown
+foundation verified clean). Sol56 diff review still to come at whole-branch stage, per the
+two-reviewer gate.
